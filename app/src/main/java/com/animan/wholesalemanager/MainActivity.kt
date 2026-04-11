@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.navigation.compose.*
+import com.animan.wholesalemanager.ui.screens.AddCustomerScreen
 import com.animan.wholesalemanager.ui.screens.DashboardScreen
 import com.animan.wholesalemanager.ui.screens.LoginScreen
 
@@ -16,9 +17,13 @@ class MainActivity : ComponentActivity() {
 
             val navController = rememberNavController()
 
+            val isLoggedIn = com.google.firebase.auth.FirebaseAuth
+                .getInstance()
+                .currentUser != null
+
             NavHost(
                 navController = navController,
-                startDestination = "login"
+                startDestination = if (isLoggedIn) "dashboard" else "login"
             ) {
 
                 composable("login") {
@@ -32,7 +37,15 @@ class MainActivity : ComponentActivity() {
                 }
 
                 composable("dashboard") {
-                    DashboardScreen()
+                    DashboardScreen(navController)
+                }
+
+                composable("add_customer") {
+                    AddCustomerScreen(
+                        onCustomerAdded = {
+                            navController.popBackStack() // go back to dashboard
+                        }
+                    )
                 }
             }
         }

@@ -7,7 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun DashboardScreen() {
+fun DashboardScreen(navController: androidx.navigation.NavController) {
 
     Column(
         modifier = Modifier
@@ -28,7 +28,11 @@ fun DashboardScreen() {
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        Button(onClick = { }) {
+        Button(
+            onClick = {
+                navController.navigate("add_customer")
+            }
+        ) {
             Text("Customers")
         }
 
@@ -36,6 +40,14 @@ fun DashboardScreen() {
 
         Button(onClick = { }) {
             Text("Products")
+        }
+
+        Button(
+            onClick = {
+                com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+            }
+        ) {
+            Text("Logout")
         }
     }
 }
