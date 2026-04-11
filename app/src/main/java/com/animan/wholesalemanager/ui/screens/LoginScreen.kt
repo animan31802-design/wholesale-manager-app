@@ -55,7 +55,7 @@ fun LoginScreen(
         Button(
             onClick = {
                 viewModel.login(email.trim(), password.trim()) {
-                    onLoginSuccess() // 🔥 navigation will come here later
+                    onLoginSuccess()
                 }
             },
             modifier = Modifier.fillMaxWidth(),
