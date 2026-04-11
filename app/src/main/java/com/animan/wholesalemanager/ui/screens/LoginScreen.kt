@@ -5,12 +5,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.animan.wholesalemanager.viewmodel.AuthViewModel
 
 @Composable
-fun LoginScreen() {
+fun LoginScreen(
+    onLoginSuccess: () -> Unit = {}
+) {
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+
+    val viewModel: AuthViewModel = viewModel()
 
     Column(
         modifier = Modifier
@@ -19,7 +25,10 @@ fun LoginScreen() {
         verticalArrangement = Arrangement.Center
     ) {
 
-        Text(text = "Login", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = "Login",
+            style = MaterialTheme.typography.headlineMedium
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -27,7 +36,8 @@ fun LoginScreen() {
             value = email,
             onValueChange = { email = it },
             label = { Text("Email") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
         )
 
         Spacer(modifier = Modifier.height(10.dp))
@@ -36,18 +46,38 @@ fun LoginScreen() {
             value = password,
             onValueChange = { password = it },
             label = { Text("Password") },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
         )
 
         Spacer(modifier = Modifier.height(20.dp))
 
         Button(
             onClick = {
-                // TODO: Handle login
+                viewModel.login(email.trim(), password.trim()) {
+                    onLoginSuccess() // 🔥 navigation will come here later
+                }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !viewModel.isLoading.value
         ) {
-            Text("Login")
+
+            if (viewModel.isLoading.value) {
+                CircularProgressIndicator(
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text("Login")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        viewModel.errorMessage.value?.let {
+            Text(
+                text = it,
+                color = MaterialTheme.colorScheme.error
+            )
         }
     }
 }
