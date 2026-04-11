@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "584160572633",
+    "project_id": "wholesalemanager-b962d",
+    "storage_bucket": "wholesalemanager-b962d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:584160572633:android:1b4508e15353e5e64cbac8",
+        "android_client_info": {
+          "package_name": "com.animan.wholesalemanager"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBodaWf6KCeB-RAFhD9YfZN5Toh9adAuVI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
