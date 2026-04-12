@@ -5,13 +5,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.navigation.compose.*
 import com.animan.wholesalemanager.ui.screens.AddCustomerScreen
+import com.animan.wholesalemanager.ui.screens.AddProductScreen
+import com.animan.wholesalemanager.ui.screens.BillingWrapperScreen
+import com.animan.wholesalemanager.ui.screens.CustomerListScreen
 import com.animan.wholesalemanager.ui.screens.DashboardScreen
 import com.animan.wholesalemanager.ui.screens.LoginScreen
+import com.animan.wholesalemanager.ui.screens.ProductListScreen
+
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        requestBluetoothPermission()
 
         setContent {
 
@@ -47,7 +58,47 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
+
+                composable("customer_list") {
+                    CustomerListScreen(navController)
+                }
+
+                composable("billing/{customerId}") { backStackEntry ->
+
+                    val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
+
+                    BillingWrapperScreen(
+                        customerId = customerId,
+                        navController = navController
+                    )
+                }
+
+                composable("product_list") {
+                    ProductListScreen(navController)
+                }
+
+                composable("add_product") {
+                    AddProductScreen(
+                        onProductAdded = {
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
+        }
+    }
+
+    fun requestBluetoothPermission() {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.BLUETOOTH_CONNECT
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
+                1
+            )
         }
     }
 }
