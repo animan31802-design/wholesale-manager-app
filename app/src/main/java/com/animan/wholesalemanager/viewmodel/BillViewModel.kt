@@ -27,4 +27,28 @@ class BillViewModel : ViewModel() {
             }
         )
     }
+
+    fun getTodaySummary(): Triple<Double, Double, Double> {
+
+        val todayStart = getStartOfDay()
+
+        val todayBills = billList.value.filter {
+            it.timestamp >= todayStart
+        }
+
+        val total = todayBills.sumOf { it.itemsTotal }
+        val paid = todayBills.sumOf { it.paidAmount }
+        val balance = todayBills.sumOf { it.balance }
+
+        return Triple(total, paid, balance)
+    }
+
+    private fun getStartOfDay(): Long {
+        val calendar = java.util.Calendar.getInstance()
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        calendar.set(java.util.Calendar.MINUTE, 0)
+        calendar.set(java.util.Calendar.SECOND, 0)
+        calendar.set(java.util.Calendar.MILLISECOND, 0)
+        return calendar.timeInMillis
+    }
 }

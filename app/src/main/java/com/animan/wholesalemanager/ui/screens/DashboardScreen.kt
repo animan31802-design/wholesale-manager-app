@@ -3,6 +3,7 @@ package com.animan.wholesalemanager.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -13,9 +14,13 @@ import com.google.firebase.auth.FirebaseAuth
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.animan.wholesalemanager.viewmodel.BillViewModel
 
 @Composable
 fun DashboardScreen(navController: NavController) {
+
+    val billViewModel: BillViewModel = viewModel()
 
     Column(
         modifier = Modifier
@@ -27,6 +32,27 @@ fun DashboardScreen(navController: NavController) {
             text = "Dashboard",
             style = MaterialTheme.typography.headlineMedium
         )
+
+        LaunchedEffect(Unit) {
+            billViewModel.fetchBills()
+        }
+
+        val (total, paid, balance) = billViewModel.getTodaySummary()
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text("Today's Summary", style = MaterialTheme.typography.titleLarge)
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(10.dp)) {
+
+                Text("Total Sales: ₹$total")
+                Text("Total Paid: ₹$paid")
+                Text("Pending Balance: ₹$balance")
+            }
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
