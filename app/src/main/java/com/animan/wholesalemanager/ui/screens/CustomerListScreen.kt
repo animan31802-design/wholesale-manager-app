@@ -55,10 +55,7 @@ fun CustomerListScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 5.dp),
-                    onClick = {
-                        navController.navigate("billing/${customer.id}")
-                    }
+                        .padding(vertical = 5.dp)
                 ) {
 
                     Column(modifier = Modifier.padding(10.dp)) {
@@ -66,6 +63,31 @@ fun CustomerListScreen(
                         Text("Name: ${customer.name}")
                         Text("Phone: ${customer.phone}")
                         Text("Balance: ₹${customer.balance}")
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row {
+
+                            // 🧾 Open Billing
+                            Button(
+                                onClick = {
+                                    navController.navigate("billing/${customer.id}")
+                                }
+                            ) {
+                                Text("Bill")
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            // 📊 Open Ledger
+                            Button(
+                                onClick = {
+                                    navController.navigate("ledger/${customer.id}")
+                                }
+                            ) {
+                                Text("Ledger")
+                            }
+                        }
                     }
                 }
             }

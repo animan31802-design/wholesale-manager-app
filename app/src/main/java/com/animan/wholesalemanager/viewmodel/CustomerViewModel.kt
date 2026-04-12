@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import com.animan.wholesalemanager.data.local.Bill
 import com.animan.wholesalemanager.data.local.BillItem
 import com.animan.wholesalemanager.data.local.Customer
+import com.animan.wholesalemanager.data.local.Ledger
 import com.animan.wholesalemanager.repository.CustomerRepository
 
 class CustomerViewModel : ViewModel() {
@@ -99,6 +100,32 @@ class CustomerViewModel : ViewModel() {
                 errorMessage.value = it
             }
         )
+
+        // CREDIT entry (bill)
+        repository.addLedgerEntry(
+            Ledger(
+                customerId = customer.id,
+                amount = itemsTotal,
+                type = "CREDIT",
+                billId = bill.id
+            ),
+            onSuccess = {},
+            onError = {}
+        )
+
+        // PAYMENT entry
+        if (paidAmount > 0) {
+            repository.addLedgerEntry(
+                Ledger(
+                    customerId = customer.id,
+                    amount = paidAmount,
+                    type = "PAYMENT",
+                    billId = bill.id
+                ),
+                onSuccess = {},
+                onError = {}
+            )
+        }
     }
     fun updateCustomerBalance(customerId: String, newBalance: Double) {
 

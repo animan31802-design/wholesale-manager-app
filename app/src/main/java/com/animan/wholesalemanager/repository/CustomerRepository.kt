@@ -2,6 +2,7 @@ package com.animan.wholesalemanager.repository
 
 import com.animan.wholesalemanager.data.local.Bill
 import com.animan.wholesalemanager.data.local.Customer
+import com.animan.wholesalemanager.data.local.Ledger
 import com.google.firebase.firestore.FirebaseFirestore
 
 class CustomerRepository {
@@ -107,5 +108,47 @@ class CustomerRepository {
 
             }
         }
+    }
+
+    fun addLedgerEntry(
+        ledger: Ledger,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        val id = db.collection("ledger").document().id
+        val newLedger = ledger.copy(id = id)
+
+        db.collection("users")
+            .document(userId!!)
+            .collection("ledger")
+            .document(id)
+            .set(newLedger)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it.message ?: "Error") }
+    }
+
+    fun getLedger(
+        customerId: String,
+        onResult: (List<Ledger>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+
+        db.collection("users")
+            .document(userId!!)
+            .collection("ledger")
+            .whereEqualTo("customerId", customerId)
+            .get()
+            .addOnSuccessListener { result ->
+                val list = result.mapNotNull {
+                    it.toObject(Ledger::class.java)
+                }.sortedByDescending { it.timestamp }
+
+                onResult(list)
+            }
+            .addOnFailureListener {
+                onError(it.message ?: "Error")
+            }
     }
 }
