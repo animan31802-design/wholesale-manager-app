@@ -42,6 +42,17 @@ fun DashboardScreen(navController: NavController) {
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        Button(
+            onClick = {
+                navController.navigate("bill_history")
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Bill History")
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
         // 👥 Customers
         Button(
             onClick = {

@@ -3,6 +3,7 @@ package com.animan.wholesalemanager.viewmodel
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import com.animan.wholesalemanager.data.local.Bill
+import com.animan.wholesalemanager.data.local.BillItem
 import com.animan.wholesalemanager.data.local.Customer
 import com.animan.wholesalemanager.repository.CustomerRepository
 
@@ -54,6 +55,7 @@ class CustomerViewModel : ViewModel() {
 
     fun createBill(
         customer: Customer,
+        items: List<BillItem>,
         itemsTotal: Double,
         paidAmount: Double,
         onSuccess: () -> Unit
@@ -73,11 +75,10 @@ class CustomerViewModel : ViewModel() {
         val bill = Bill(
             customerId = customer.id,
             customerName = customer.name,
+            items = items,
             itemsTotal = itemsTotal,
-            previousBalance = previousBalance,
-            finalAmount = finalAmount,
             paidAmount = paidAmount,
-            remainingBalance = remaining
+            balance = itemsTotal + customer.balance - paidAmount
         )
 
         repository.saveBill(

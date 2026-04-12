@@ -61,4 +61,25 @@ class CustomerRepository {
             .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { onError(it.message ?: "Error") }
     }
+
+    fun getBills(
+        onResult: (List<Bill>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+
+        db.collection("users")
+            .document(userId!!)
+            .collection("bills")
+            .get()
+            .addOnSuccessListener { result ->
+                val list = result.mapNotNull {
+                    it.toObject(Bill::class.java)
+                }
+                onResult(list)
+            }
+            .addOnFailureListener {
+                onError(it.message ?: "Error")
+            }
+    }
 }

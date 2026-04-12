@@ -16,6 +16,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import com.animan.wholesalemanager.ui.screens.BillHistoryScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -83,6 +84,10 @@ class MainActivity : ComponentActivity() {
                             navController.popBackStack()
                         }
                     )
+                }
+
+                composable("bill_history") {
+                    BillHistoryScreen(navController)
                 }
             }
         }

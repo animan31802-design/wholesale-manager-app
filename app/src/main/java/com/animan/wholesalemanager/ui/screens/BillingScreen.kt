@@ -195,6 +195,7 @@ fun BillingScreen(
 
                 customerViewModel.createBill(
                     customer,
+                    billItems,
                     itemsTotal,
                     paid
                 ) {
