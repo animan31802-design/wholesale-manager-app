@@ -63,7 +63,7 @@ fun ProductListScreen(
 
                         Text("Name: ${product.name}")
                         Text("Price: ₹${product.price}")
-                        Text("Stock: ${product.stock}")
+                        Text("Stock: ${product.quantity}")
                     }
                 }
             }

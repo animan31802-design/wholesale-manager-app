@@ -84,7 +84,13 @@ class CustomerViewModel : ViewModel() {
         repository.saveBill(
             bill,
             onSuccess = {
+
+                // Update customer balance
                 updateCustomerBalance(customer.id, remaining)
+
+                // Update product stock
+                repository.updateProductStock(items)
+
                 isLoading.value = false
                 onSuccess()
             },

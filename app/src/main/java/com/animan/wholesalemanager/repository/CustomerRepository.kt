@@ -82,4 +82,30 @@ class CustomerRepository {
                 onError(it.message ?: "Error")
             }
     }
+
+    fun updateProductStock(
+        items: List<com.animan.wholesalemanager.data.local.BillItem>
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+
+        items.forEach { item ->
+
+            val productRef = db.collection("users")
+                .document(userId!!)
+                .collection("products")
+                .document(item.productId)
+
+            db.runTransaction { transaction ->
+
+                val snapshot = transaction.get(productRef)
+                val currentQty = snapshot.getLong("quantity")?.toInt() ?: 0
+
+                val newQty = (currentQty - item.quantity).coerceAtLeast(0)
+
+                transaction.update(productRef, "quantity", newQty)
+
+            }
+        }
+    }
 }

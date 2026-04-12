@@ -20,7 +20,7 @@ class ProductViewModel : ViewModel() {
         val product = Product(
             name = name,
             price = price,
-            stock = stock
+            quantity = stock
         )
 
         repository.addProduct(

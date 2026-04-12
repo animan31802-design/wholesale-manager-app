@@ -75,11 +75,19 @@ fun BillingScreen(
                         Column {
                             Text(product.name)
                             Text("₹${product.price}")
+                            Text("Stock: ${product.quantity}")
                         }
+
+                        val existing = billItems.find { it.productId == product.id }
+                        val currentQtyInCart = existing?.quantity ?: 0
 
                         Button(
                             onClick = {
-                                val existing = billItems.find { it.productId == product.id }
+
+                                if (product.quantity <= currentQtyInCart) {
+                                    // Out of stock
+                                    return@Button
+                                }
 
                                 if (existing != null) {
                                     existing.quantity++
@@ -93,7 +101,8 @@ fun BillingScreen(
                                         )
                                     )
                                 }
-                            }
+                            },
+                            enabled = product.quantity > currentQtyInCart
                         ) {
                             Text("Add")
                         }
@@ -135,6 +144,8 @@ fun BillingScreen(
                             Button(onClick = {
                                 if (item.quantity > 1) {
                                     item.quantity--
+                                }else {
+                                    billItems.remove(item)
                                 }
                             }) {
                                 Text("-")
@@ -142,10 +153,22 @@ fun BillingScreen(
 
                             Spacer(modifier = Modifier.width(5.dp))
 
+                            val product = productViewModel.productList.value
+                                .find { it.id == item.productId }
+
+                            val availableStock = product?.quantity ?: 0
+
                             // Increase
-                            Button(onClick = {
-                                item.quantity++
-                            }) {
+                            Button(
+                                onClick = {
+                                    if (item.quantity < availableStock) {
+                                        item.quantity++
+                                    } else {
+                                        println("Stock limit reached")
+                                    }
+                                },
+                                enabled = item.quantity < availableStock
+                            ) {
                                 Text("+")
                             }
 
@@ -214,7 +237,8 @@ fun BillingScreen(
                     onBillCreated()
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = billItems.isNotEmpty()
         ) {
             Text("Save Bill")
         }
