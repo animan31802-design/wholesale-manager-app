@@ -15,6 +15,8 @@ import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
 import com.animan.wholesalemanager.printer.PrinterManager
 import com.animan.wholesalemanager.utils.LOW_STOCK_THRESHOLD
+import com.animan.wholesalemanager.utils.PdfGenerator
+import com.animan.wholesalemanager.utils.PdfGenerator.sharePdf
 
 @Composable
 fun BillingScreen(
@@ -267,6 +269,17 @@ fun BillingScreen(
                     )
 
                     message = "Bill saved. $result"
+
+                    val file = PdfGenerator.generateBillPdf(
+                        context,
+                        customer,
+                        billItems,
+                        itemsTotal,
+                        paid,
+                        finalAmount - paid
+                    )
+
+                    sharePdf(context, file)
 
                     onBillCreated()
                 }
