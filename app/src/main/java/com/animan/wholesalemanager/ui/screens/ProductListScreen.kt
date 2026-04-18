@@ -16,8 +16,10 @@ import com.animan.wholesalemanager.viewmodel.ProductViewModel
 fun ProductListScreen(
     navController: NavController
 ) {
-
     val viewModel: ProductViewModel = viewModel()
+
+    var showDialog by remember { mutableStateOf(false) }
+    var selectedProductId by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         viewModel.fetchProducts()
@@ -29,17 +31,12 @@ fun ProductListScreen(
             .padding(16.dp)
     ) {
 
-        Text(
-            text = "Products",
-            style = MaterialTheme.typography.headlineMedium
-        )
+        Text("Products", style = MaterialTheme.typography.headlineMedium)
 
         Spacer(modifier = Modifier.height(10.dp))
 
         Button(
-            onClick = {
-                navController.navigate("add_product")
-            }
+            onClick = { navController.navigate("add_product") }
         ) {
             Text("Add Product")
         }
@@ -64,6 +61,7 @@ fun ProductListScreen(
 
                         Text("Name: ${product.name}")
                         Text("Price: ₹${product.price}")
+
                         Text(
                             text = "Stock: ${product.quantity}",
                             color = if (product.quantity <= LOW_STOCK_THRESHOLD)
@@ -78,9 +76,60 @@ fun ProductListScreen(
                                 color = MaterialTheme.colorScheme.error
                             )
                         }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row {
+
+                            // ✏️ EDIT
+                            Button(
+                                onClick = {
+                                    navController.navigate("edit_product/${product.id}")
+                                }
+                            ) {
+                                Text("Edit")
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            // 🗑 DELETE
+                            Button(
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                ),
+                                onClick = {
+                                    selectedProductId = product.id
+                                    showDialog = true
+                                }
+                            ) {
+                                Text("Delete")
+                            }
+                        }
                     }
                 }
             }
+        }
+
+        // 🔥 DELETE CONFIRM DIALOG (GLOBAL)
+        if (showDialog) {
+            AlertDialog(
+                onDismissRequest = { showDialog = false },
+                confirmButton = {
+                    Button(onClick = {
+                        viewModel.deleteProduct(selectedProductId) {}
+                        showDialog = false
+                    }) {
+                        Text("Yes")
+                    }
+                },
+                dismissButton = {
+                    Button(onClick = { showDialog = false }) {
+                        Text("No")
+                    }
+                },
+                title = { Text("Delete Product") },
+                text = { Text("Are you sure?") }
+            )
         }
 
         viewModel.errorMessage.value?.let {

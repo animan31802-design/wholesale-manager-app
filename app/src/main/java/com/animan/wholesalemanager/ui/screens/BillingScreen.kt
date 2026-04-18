@@ -86,7 +86,7 @@ fun BillingScreen(
 
                             if (product.quantity <= LOW_STOCK_THRESHOLD) {
                                 Text(
-                                    text = "⚠ Only \${product.quantity} left",
+                                    text = "⚠ Only ${product.quantity} left",
                                     color = MaterialTheme.colorScheme.error
                                 )
                             }

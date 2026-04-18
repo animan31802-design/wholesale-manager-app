@@ -13,14 +13,14 @@ class ProductViewModel : ViewModel() {
     var isLoading = mutableStateOf(false)
     var errorMessage = mutableStateOf<String?>(null)
 
-    fun addProduct(name: String, price: Double, stock: Int, onSuccess: () -> Unit) {
+    fun addProduct(name: String, price: Double, quantity: Int, onSuccess: () -> Unit) {
 
         isLoading.value = true
 
         val product = Product(
             name = name,
             price = price,
-            quantity = stock
+            quantity = quantity
         )
 
         repository.addProduct(
@@ -43,6 +43,46 @@ class ProductViewModel : ViewModel() {
             onResult = {
                 isLoading.value = false
                 productList.value = it
+            },
+            onError = {
+                isLoading.value = false
+                errorMessage.value = it
+            }
+        )
+    }
+
+    fun updateProduct(
+        product: Product,
+        onSuccess: () -> Unit
+    ) {
+        isLoading.value = true
+
+        repository.updateProduct(
+            product,
+            onSuccess = {
+                isLoading.value = false
+                fetchProducts()
+                onSuccess()
+            },
+            onError = {
+                isLoading.value = false
+                errorMessage.value = it
+            }
+        )
+    }
+
+    fun deleteProduct(
+        productId: String,
+        onSuccess: () -> Unit
+    ) {
+        isLoading.value = true
+
+        repository.deleteProduct(
+            productId,
+            onSuccess = {
+                isLoading.value = false
+                fetchProducts()
+                onSuccess()
             },
             onError = {
                 isLoading.value = false

@@ -83,11 +83,12 @@ class MainActivity : ComponentActivity() {
                 }
 
                 composable("add_product") {
-                    AddProductScreen(
-                        onProductAdded = {
-                            navController.popBackStack()
-                        }
-                    )
+                    AddProductScreen(navController)
+                }
+
+                composable("edit_product/{productId}") { backStackEntry ->
+                    val productId = backStackEntry.arguments?.getString("productId") ?: ""
+                    AddProductScreen(navController, productId)
                 }
 
                 composable("expenses") {

@@ -6,16 +6,36 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import com.animan.wholesalemanager.data.local.Product
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
 
 @Composable
-fun AddProductScreen(onProductAdded: () -> Unit = {}) {
+fun AddProductScreen(
+    navController: NavController,
+    productId: String? = null
+) {
 
     val viewModel: ProductViewModel = viewModel()
 
     var name by remember { mutableStateOf("") }
     var price by remember { mutableStateOf("") }
-    var stock by remember { mutableStateOf("") }
+    var quantity by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchProducts()
+    }
+
+    LaunchedEffect(productId) {
+        if (productId != null) {
+            val product = viewModel.productList.value.find { it.id == productId }
+            product?.let {
+                name = it.name
+                price = it.price.toString()
+                quantity = it.quantity.toString()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -23,7 +43,10 @@ fun AddProductScreen(onProductAdded: () -> Unit = {}) {
             .padding(16.dp)
     ) {
 
-        Text("Add Product", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            if (productId == null) "Add Product" else "Edit Product",
+            style = MaterialTheme.typography.headlineMedium
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
 
@@ -44,25 +67,38 @@ fun AddProductScreen(onProductAdded: () -> Unit = {}) {
         Spacer(modifier = Modifier.height(10.dp))
 
         OutlinedTextField(
-            value = stock,
-            onValueChange = { stock = it },
-            label = { Text("Stock") }
+            value = quantity,
+            onValueChange = { quantity = it },
+            label = { Text("Quantity") }
         )
 
         Spacer(modifier = Modifier.height(20.dp))
 
         Button(
             onClick = {
-                viewModel.addProduct(
-                    name,
-                    price.toDoubleOrNull() ?: 0.0,
-                    stock.toIntOrNull() ?: 0
-                ) {
-                    onProductAdded()
+                val product = Product(
+                    id = productId ?: "",
+                    name = name,
+                    price = price.toDoubleOrNull() ?: 0.0,
+                    quantity = quantity.toIntOrNull() ?: 0
+                )
+
+                if (productId == null) {
+                    viewModel.addProduct(
+                        name,
+                        product.price,
+                        product.quantity
+                    ) {
+                        navController.popBackStack()
+                    }
+                } else {
+                    viewModel.updateProduct(product) {
+                        navController.popBackStack()
+                    }
                 }
             }
         ) {
-            Text("Save Product")
+            Text(if (productId == null) "Add" else "Update")
         }
     }
 }

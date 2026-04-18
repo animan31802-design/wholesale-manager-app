@@ -73,4 +73,36 @@ class ProductRepository {
             .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { onError(it.message ?: "Stock update failed") }
     }
+
+    fun updateProduct(
+        product: Product,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+
+        db.collection("users")
+            .document(userId!!)
+            .collection("products")
+            .document(product.id)
+            .set(product)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it.message ?: "Error") }
+    }
+
+    fun deleteProduct(
+        productId: String,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+
+        db.collection("users")
+            .document(userId!!)
+            .collection("products")
+            .document(productId)
+            .delete()
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it.message ?: "Error") }
+    }
 }
