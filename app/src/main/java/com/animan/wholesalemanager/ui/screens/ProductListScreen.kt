@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.animan.wholesalemanager.utils.LOW_STOCK_THRESHOLD
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
 
 @Composable
@@ -63,7 +64,20 @@ fun ProductListScreen(
 
                         Text("Name: ${product.name}")
                         Text("Price: ₹${product.price}")
-                        Text("Stock: ${product.quantity}")
+                        Text(
+                            text = "Stock: ${product.quantity}",
+                            color = if (product.quantity <= LOW_STOCK_THRESHOLD)
+                                MaterialTheme.colorScheme.error
+                            else
+                                MaterialTheme.colorScheme.onSurface
+                        )
+
+                        if (product.quantity <= LOW_STOCK_THRESHOLD) {
+                            Text(
+                                text = "⚠ Low Stock",
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
                 }
             }

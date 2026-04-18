@@ -14,6 +14,7 @@ import com.animan.wholesalemanager.data.local.BillItem
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
 import com.animan.wholesalemanager.printer.PrinterManager
+import com.animan.wholesalemanager.utils.LOW_STOCK_THRESHOLD
 
 @Composable
 fun BillingScreen(
@@ -75,7 +76,20 @@ fun BillingScreen(
                         Column {
                             Text(product.name)
                             Text("₹${product.price}")
-                            Text("Stock: ${product.quantity}")
+                            Text(
+                                text = "Stock: ${product.quantity}",
+                                color = if (product.quantity <= LOW_STOCK_THRESHOLD)
+                                    MaterialTheme.colorScheme.error
+                                else
+                                    MaterialTheme.colorScheme.onSurface
+                            )
+
+                            if (product.quantity <= LOW_STOCK_THRESHOLD) {
+                                Text(
+                                    text = "⚠ Only \${product.quantity} left",
+                                    color = MaterialTheme.colorScheme.error
+                                )
+                            }
                         }
 
                         val existing = billItems.find { it.productId == product.id }
@@ -104,7 +118,7 @@ fun BillingScreen(
                             },
                             enabled = product.quantity > currentQtyInCart
                         ) {
-                            Text("Add")
+                            Text(if (product.quantity == 0) "Out of Stock" else "Add")
                         }
                     }
                 }

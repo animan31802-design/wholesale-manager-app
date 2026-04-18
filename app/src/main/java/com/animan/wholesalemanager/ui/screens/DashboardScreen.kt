@@ -15,14 +15,20 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.animan.wholesalemanager.utils.LOW_STOCK_THRESHOLD
 import com.animan.wholesalemanager.viewmodel.BillViewModel
 import com.animan.wholesalemanager.viewmodel.ExpenseViewModel
+import com.animan.wholesalemanager.viewmodel.ProductViewModel
 
 @Composable
 fun DashboardScreen(navController: NavController) {
 
     val billViewModel: BillViewModel = viewModel()
     val expenseViewModel: ExpenseViewModel = viewModel()
+    val productViewModel: ProductViewModel = viewModel()
+
+    val lowStockProducts = productViewModel.productList.value
+        .filter { it.quantity <= LOW_STOCK_THRESHOLD }
 
     Column(
         modifier = Modifier
@@ -70,6 +76,15 @@ fun DashboardScreen(navController: NavController) {
                 Text("Total Expenses: ₹$totalExpenses")
                 Text("Profit: ₹$profit")
             }
+        }
+
+        if (lowStockProducts.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                "⚠ ${lowStockProducts.size} products low in stock",
+                color = MaterialTheme.colorScheme.error
+            )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
