@@ -2,6 +2,7 @@ package com.animan.wholesalemanager.repository
 
 import com.animan.wholesalemanager.data.local.Bill
 import com.animan.wholesalemanager.data.local.Customer
+import com.animan.wholesalemanager.data.local.Expense
 import com.animan.wholesalemanager.data.local.Ledger
 import com.google.firebase.firestore.FirebaseFirestore
 
@@ -46,7 +47,7 @@ class CustomerRepository {
 
     fun saveBill(
         bill: Bill,
-        onSuccess: () -> Unit,
+        onSuccess: (String) -> Unit,
         onError: (String) -> Unit
     ) {
         val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
@@ -59,7 +60,7 @@ class CustomerRepository {
             .collection("bills")
             .document(id)
             .set(newBill)
-            .addOnSuccessListener { onSuccess() }
+            .addOnSuccessListener { onSuccess(id) }
             .addOnFailureListener { onError(it.message ?: "Error") }
     }
 
@@ -85,28 +86,32 @@ class CustomerRepository {
     }
 
     fun updateProductStock(
-        items: List<com.animan.wholesalemanager.data.local.BillItem>
+        items: List<com.animan.wholesalemanager.data.local.BillItem>,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
     ) {
         val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        val db = FirebaseFirestore.getInstance()
 
-        items.forEach { item ->
+        val batch = db.batch()
 
-            val productRef = db.collection("users")
-                .document(userId!!)
-                .collection("products")
-                .document(item.productId)
+        try {
+            items.forEach { item ->
 
-            db.runTransaction { transaction ->
+                val productRef = db.collection("users")
+                    .document(userId!!)
+                    .collection("products")
+                    .document(item.productId)
 
-                val snapshot = transaction.get(productRef)
-                val currentQty = snapshot.getLong("quantity")?.toInt() ?: 0
-
-                val newQty = (currentQty - item.quantity).coerceAtLeast(0)
-
-                transaction.update(productRef, "quantity", newQty)
-
+                batch.update(productRef, "quantity", com.google.firebase.firestore.FieldValue.increment(-item.quantity.toLong()))
             }
+
+            batch.commit()
+                .addOnSuccessListener { onSuccess() }
+                .addOnFailureListener { onError(it.message ?: "Stock update failed") }
+
+        } catch (e: Exception) {
+            onError(e.message ?: "Error")
         }
     }
 
@@ -145,6 +150,66 @@ class CustomerRepository {
                     it.toObject(Ledger::class.java)
                 }.sortedByDescending { it.timestamp }
 
+                onResult(list)
+            }
+            .addOnFailureListener {
+                onError(it.message ?: "Error")
+            }
+    }
+
+    fun getBillsSummary(
+        onResult: (List<Bill>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+
+        db.collection("users")
+            .document(userId!!)
+            .collection("bills")
+            .get()
+            .addOnSuccessListener { result ->
+                val list = result.mapNotNull {
+                    it.toObject(Bill::class.java)
+                }
+                onResult(list)
+            }
+            .addOnFailureListener {
+                onError(it.message ?: "Error")
+            }
+    }
+
+    fun addExpense(
+        expense: Expense,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        val id = db.collection("expenses").document().id
+        val newExpense = expense.copy(id = id)
+
+        db.collection("users")
+            .document(userId!!)
+            .collection("expenses")
+            .document(id)
+            .set(newExpense)
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it.message ?: "Error") }
+    }
+
+    fun getExpenses(
+        onResult: (List<Expense>) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+
+        db.collection("users")
+            .document(userId!!)
+            .collection("expenses")
+            .get()
+            .addOnSuccessListener {
+                val list = it.mapNotNull { doc ->
+                    doc.toObject(Expense::class.java)
+                }
                 onResult(list)
             }
             .addOnFailureListener {

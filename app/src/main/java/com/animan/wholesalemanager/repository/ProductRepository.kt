@@ -1,5 +1,6 @@
 package com.animan.wholesalemanager.repository
 
+import com.animan.wholesalemanager.data.local.BillItem
 import com.animan.wholesalemanager.data.local.Product
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -46,5 +47,30 @@ class ProductRepository {
             .addOnFailureListener {
                 onError(it.message ?: "Error")
             }
+    }
+
+    fun updateProductStock(
+        items: List<BillItem>,
+        onSuccess: () -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+
+        val batch = db.batch()
+
+        items.forEach { item ->
+
+            val productRef = db.collection("users")
+                .document(userId!!)
+                .collection("products")
+                .document(item.productId)
+
+            batch.update(productRef, "quantity", com.google.firebase.firestore.FieldValue.increment(-item.quantity.toLong()))
+        }
+
+        batch.commit()
+            .addOnSuccessListener { onSuccess() }
+            .addOnFailureListener { onError(it.message ?: "Stock update failed") }
     }
 }

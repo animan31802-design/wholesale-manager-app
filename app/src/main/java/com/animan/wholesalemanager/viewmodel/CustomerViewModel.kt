@@ -67,65 +67,67 @@ class CustomerViewModel : ViewModel() {
         val finalAmount = itemsTotal + previousBalance
         val remaining = finalAmount - paidAmount
 
-        println("ItemsTotal: $itemsTotal")
-        println("Previous: $previousBalance")
-        println("Final: $finalAmount")
-        println("Paid: $paidAmount")
-        println("Remaining: $remaining")
-
         val bill = Bill(
             customerId = customer.id,
             customerName = customer.name,
             items = items,
             itemsTotal = itemsTotal,
             paidAmount = paidAmount,
-            balance = itemsTotal + customer.balance - paidAmount
+            balance = remaining
         )
 
         repository.saveBill(
             bill,
-            onSuccess = {
+            onSuccess = { billId ->
 
-                // Update customer balance
                 updateCustomerBalance(customer.id, remaining)
 
-                // Update product stock
-                repository.updateProductStock(items)
+                repository.updateProductStock(
+                    items,
+                    onSuccess = {
 
-                isLoading.value = false
-                onSuccess()
+                        // CREDIT
+                        repository.addLedgerEntry(
+                            Ledger(
+                                customerId = customer.id,
+                                amount = itemsTotal,
+                                type = "CREDIT",
+                                billId = billId
+                            ),
+                            onSuccess = {},
+                            onError = {}
+                        )
+
+                        // PAYMENT
+                        if (paidAmount > 0) {
+                            repository.addLedgerEntry(
+                                Ledger(
+                                    customerId = customer.id,
+                                    amount = paidAmount,
+                                    type = "PAYMENT",
+                                    billId = billId
+                                ),
+                                onSuccess = {},
+                                onError = {
+                                    errorMessage.value = it
+                                }
+                            )
+                        }
+
+                        isLoading.value = false
+                        onSuccess()
+                    },
+                    onError = {
+                        isLoading.value = false
+                        errorMessage.value = it
+                    }
+                )
             },
             onError = {
                 isLoading.value = false
                 errorMessage.value = it
             }
         )
-
-        // CREDIT entry (bill)
-        repository.addLedgerEntry(
-            Ledger(
-                customerId = customer.id,
-                amount = itemsTotal,
-                type = "CREDIT",
-                billId = bill.id
-            ),
-            onSuccess = {},
-            onError = {}
-        )
-
-        // PAYMENT entry
-        if (paidAmount > 0) {
-            repository.addLedgerEntry(
-                Ledger(
-                    customerId = customer.id,
-                    amount = paidAmount,
-                    type = "PAYMENT",
-                    billId = bill.id
-                ),
-                onSuccess = {},
-                onError = {}
-            )
-        }
     }
     fun updateCustomerBalance(customerId: String, newBalance: Double) {
 

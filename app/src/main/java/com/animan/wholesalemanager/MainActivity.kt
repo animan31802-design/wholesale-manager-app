@@ -18,7 +18,9 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.animan.wholesalemanager.data.local.Customer
 import com.animan.wholesalemanager.ui.screens.BillHistoryScreen
+import com.animan.wholesalemanager.ui.screens.ExpenseScreen
 import com.animan.wholesalemanager.ui.screens.LedgerScreen
+import com.animan.wholesalemanager.ui.screens.ReportScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -88,10 +90,17 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
+                composable("expenses") {
+                    ExpenseScreen()
+                }
+
+                composable("reports") {
+                    ReportScreen()
+                }
+
                 composable("bill_history") {
                     BillHistoryScreen(navController)
                 }
-
                 composable("ledger/{customerId}") { backStackEntry ->
                     val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
 

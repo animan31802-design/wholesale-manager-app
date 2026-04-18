@@ -16,11 +16,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.animan.wholesalemanager.viewmodel.BillViewModel
+import com.animan.wholesalemanager.viewmodel.ExpenseViewModel
 
 @Composable
 fun DashboardScreen(navController: NavController) {
 
     val billViewModel: BillViewModel = viewModel()
+    val expenseViewModel: ExpenseViewModel = viewModel()
 
     Column(
         modifier = Modifier
@@ -39,6 +41,11 @@ fun DashboardScreen(navController: NavController) {
 
         val (total, paid, balance) = billViewModel.getTodaySummary()
 
+        val totalSales = billViewModel.billList.value.sumOf { it.itemsTotal }
+        val totalExpenses = expenseViewModel.expenseList.value.sumOf { it.amount }
+
+        val profit = totalSales - totalExpenses
+
         Spacer(modifier = Modifier.height(20.dp))
 
         Text("Today's Summary", style = MaterialTheme.typography.titleLarge)
@@ -51,6 +58,17 @@ fun DashboardScreen(navController: NavController) {
                 Text("Total Sales: ₹$total")
                 Text("Total Paid: ₹$paid")
                 Text("Pending Balance: ₹$balance")
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(10.dp)) {
+
+                Text("Total Sales: ₹$totalSales")
+                Text("Total Expenses: ₹$totalExpenses")
+                Text("Profit: ₹$profit")
             }
         }
 
@@ -87,6 +105,27 @@ fun DashboardScreen(navController: NavController) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Customers")
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Button(
+            onClick = {
+                navController.navigate("expenses")
+            }
+        ) {
+            Text("Expenses")
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Button(
+            onClick = {
+                navController.navigate("reports")
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Reports")
         }
 
         Spacer(modifier = Modifier.height(10.dp))

@@ -214,7 +214,27 @@ fun BillingScreen(
 
         Button(
             onClick = {
-                val paid = paidAmount.toDoubleOrNull() ?: 0.0
+                if (billItems.isEmpty()) {
+                    message = "Add at least one product"
+                    return@Button
+                }
+
+                val paid = paidAmount.toDoubleOrNull()
+
+                if (paid == null) {
+                    message = "Invalid paid amount"
+                    return@Button
+                }
+
+                if (paid < 0) {
+                    message = "Paid amount cannot be negative"
+                    return@Button
+                }
+
+                if (paid > itemsTotal + customer.balance) {
+                    message = "Paid amount exceeds total"
+                    return@Button
+                }
 
                 customerViewModel.createBill(
                     customer,
@@ -238,7 +258,7 @@ fun BillingScreen(
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = billItems.isNotEmpty()
+            enabled = billItems.isNotEmpty() || !customerViewModel.isLoading.value
         ) {
             Text("Save Bill")
         }
