@@ -1,57 +1,61 @@
 package com.animan.wholesalemanager.viewmodel
 
+import android.app.Application
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.ViewModel
-import com.animan.wholesalemanager.data.local.Bill
-import com.animan.wholesalemanager.data.local.BillItem
-import com.animan.wholesalemanager.data.local.Customer
-import com.animan.wholesalemanager.data.local.Ledger
+import androidx.lifecycle.AndroidViewModel
+import com.animan.wholesalemanager.data.local.*
 import com.animan.wholesalemanager.repository.CustomerRepository
 
-class CustomerViewModel : ViewModel() {
+class CustomerViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repository = CustomerRepository()
+    private val repository = CustomerRepository(app.applicationContext)
 
     var isLoading = mutableStateOf(false)
     var errorMessage = mutableStateOf<String?>(null)
+    var customerList = mutableStateOf<List<Customer>>(emptyList())
 
-    fun addCustomer(name: String, phone: String, onSuccess: () -> Unit) {
-
+    fun addCustomer(name: String, phone: String, address: String = "", onSuccess: () -> Unit) {
+        if (name.isBlank()) { errorMessage.value = "Name cannot be empty"; return }
         isLoading.value = true
-
-        val customer = Customer(
-            name = name,
-            phone = phone
-        )
-
         repository.addCustomer(
-            customer,
-            onSuccess = {
-                isLoading.value = false
-                onSuccess()
-            },
-            onError = {
-                isLoading.value = false
-                errorMessage.value = it
-            }
+            Customer(name = name.trim(), phone = phone.trim(), address = address.trim()),
+            onSuccess = { isLoading.value = false; onSuccess() },
+            onError = { isLoading.value = false; errorMessage.value = it }
         )
     }
 
-    var customerList = mutableStateOf<List<Customer>>(emptyList())
-
     fun fetchCustomers() {
         isLoading.value = true
-
         repository.getCustomers(
-            onResult = {
-                isLoading.value = false
-                customerList.value = it
-            },
-            onError = {
-                isLoading.value = false
-                errorMessage.value = it
-            }
+            onResult = { isLoading.value = false; customerList.value = it },
+            onError = { isLoading.value = false; errorMessage.value = it }
         )
+    }
+
+    fun updateCustomer(customer: Customer, onSuccess: () -> Unit) {
+        isLoading.value = true
+        repository.updateCustomer(
+            customer,
+            onSuccess = { isLoading.value = false; fetchCustomers(); onSuccess() },
+            onError = { isLoading.value = false; errorMessage.value = it }
+        )
+    }
+
+    fun deleteCustomer(id: String, onSuccess: () -> Unit) {
+        isLoading.value = true
+        repository.deleteCustomer(
+            id,
+            onSuccess = { isLoading.value = false; fetchCustomers(); onSuccess() },
+            onError = { isLoading.value = false; errorMessage.value = it }
+        )
+    }
+
+    fun searchCustomers(query: String) {
+        customerList.value = if (query.isBlank()) {
+            repository.searchCustomers("")
+        } else {
+            repository.searchCustomers(query)
+        }
     }
 
     fun createBill(
@@ -59,8 +63,11 @@ class CustomerViewModel : ViewModel() {
         items: List<BillItem>,
         itemsTotal: Double,
         paidAmount: Double,
-        onSuccess: () -> Unit
+        onSuccess: (billId: String) -> Unit
     ) {
+        if (items.isEmpty()) { errorMessage.value = "Add at least one item"; return }
+        if (paidAmount < 0) { errorMessage.value = "Paid amount cannot be negative"; return }
+
         isLoading.value = true
 
         val previousBalance = customer.balance
@@ -73,71 +80,30 @@ class CustomerViewModel : ViewModel() {
             items = items,
             itemsTotal = itemsTotal,
             paidAmount = paidAmount,
-            balance = remaining
+            balance = remaining,
+            timestamp = System.currentTimeMillis()
         )
 
         repository.saveBill(
-            bill,
+            bill = bill,
+            customer = customer,
             onSuccess = { billId ->
-
-                updateCustomerBalance(customer.id, remaining)
-
-                repository.updateProductStock(
-                    items,
-                    onSuccess = {
-
-                        // CREDIT
-                        repository.addLedgerEntry(
-                            Ledger(
-                                customerId = customer.id,
-                                amount = itemsTotal,
-                                type = "CREDIT",
-                                billId = billId
-                            ),
-                            onSuccess = {},
-                            onError = {}
-                        )
-
-                        // PAYMENT
-                        if (paidAmount > 0) {
-                            repository.addLedgerEntry(
-                                Ledger(
-                                    customerId = customer.id,
-                                    amount = paidAmount,
-                                    type = "PAYMENT",
-                                    billId = billId
-                                ),
-                                onSuccess = {},
-                                onError = {
-                                    errorMessage.value = it
-                                }
-                            )
-                        }
-
-                        isLoading.value = false
-                        onSuccess()
-                    },
-                    onError = {
-                        isLoading.value = false
-                        errorMessage.value = it
-                    }
-                )
-            },
-            onError = {
                 isLoading.value = false
-                errorMessage.value = it
-            }
+                fetchCustomers()
+                onSuccess(billId)
+            },
+            onError = { isLoading.value = false; errorMessage.value = it }
         )
     }
-    fun updateCustomerBalance(customerId: String, newBalance: Double) {
 
-        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
-
-        com.google.firebase.firestore.FirebaseFirestore.getInstance()
-            .collection("users")
-            .document(userId)
-            .collection("customers")
-            .document(customerId)
-            .update("balance", newBalance)
+    fun recordPayment(customer: Customer, amount: Double, note: String, onSuccess: () -> Unit) {
+        if (amount <= 0) { errorMessage.value = "Invalid amount"; return }
+        if (amount > customer.balance) { errorMessage.value = "Amount exceeds balance"; return }
+        isLoading.value = true
+        repository.recordPayment(
+            customer, amount, note,
+            onSuccess = { isLoading.value = false; fetchCustomers(); onSuccess() },
+            onError = { isLoading.value = false; errorMessage.value = it }
+        )
     }
 }

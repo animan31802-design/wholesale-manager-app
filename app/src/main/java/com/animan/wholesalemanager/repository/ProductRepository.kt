@@ -1,108 +1,52 @@
 package com.animan.wholesalemanager.repository
 
-import com.animan.wholesalemanager.data.local.BillItem
+import android.content.Context
+import com.animan.wholesalemanager.data.local.DatabaseHelper
 import com.animan.wholesalemanager.data.local.Product
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import java.util.UUID
 
-class ProductRepository {
+class ProductRepository(private val context: Context) {
 
-    private val db = FirebaseFirestore.getInstance()
+    private val db by lazy { DatabaseHelper(context) }
 
-    fun addProduct(
-        product: Product,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-
-        val id = db.collection("products").document().id
-        val newProduct = product.copy(id = id)
-
-        db.collection("users")
-            .document(userId)
-            .collection("products")
-            .document(id)
-            .set(newProduct)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it.message ?: "Error") }
+    fun addProduct(product: Product, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val newProduct = product.copy(id = UUID.randomUUID().toString())
+        if (db.insertProduct(newProduct)) onSuccess()
+        else onError("Failed to save product")
     }
 
-    fun getProducts(
-        onResult: (List<Product>) -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-
-        db.collection("users")
-            .document(userId)
-            .collection("products")
-            .get()
-            .addOnSuccessListener { result ->
-                val list = result.mapNotNull {
-                    it.toObject(Product::class.java)
-                }
-                onResult(list)
-            }
-            .addOnFailureListener {
-                onError(it.message ?: "Error")
-            }
-    }
-
-    fun updateProductStock(
-        items: List<BillItem>,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-
-        val batch = db.batch()
-
-        items.forEach { item ->
-
-            val productRef = db.collection("users")
-                .document(userId!!)
-                .collection("products")
-                .document(item.productId)
-
-            batch.update(productRef, "quantity", com.google.firebase.firestore.FieldValue.increment(-item.quantity.toLong()))
+    fun getProducts(onResult: (List<Product>) -> Unit, onError: (String) -> Unit) {
+        try {
+            onResult(db.getAllProducts())
+        } catch (e: Exception) {
+            onError(e.message ?: "Error loading products")
         }
-
-        batch.commit()
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it.message ?: "Stock update failed") }
     }
 
-    fun updateProduct(
-        product: Product,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-
-        db.collection("users")
-            .document(userId!!)
-            .collection("products")
-            .document(product.id)
-            .set(product)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it.message ?: "Error") }
+    fun updateProduct(product: Product, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        if (db.updateProduct(product)) onSuccess()
+        else onError("Failed to update product")
     }
 
-    fun deleteProduct(
+    fun deleteProduct(id: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        if (db.deleteProduct(id)) onSuccess()
+        else onError("Failed to delete product")
+    }
+
+    fun searchProducts(query: String): List<Product> = db.searchProducts(query)
+
+    // Used when owner buys new stock — adds quantity to existing product
+    fun restockProduct(
         productId: String,
+        qty: Int,
         onSuccess: () -> Unit,
         onError: (String) -> Unit
     ) {
-        val userId = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid
-
-        db.collection("users")
-            .document(userId!!)
-            .collection("products")
-            .document(productId)
-            .delete()
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it.message ?: "Error") }
+        try {
+            db.incrementProductStock(productId, qty)
+            onSuccess()
+        } catch (e: Exception) {
+            onError(e.message ?: "Restock failed")
+        }
     }
 }

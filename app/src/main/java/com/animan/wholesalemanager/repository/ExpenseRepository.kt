@@ -1,50 +1,43 @@
 package com.animan.wholesalemanager.repository
 
+import android.content.Context
+import com.animan.wholesalemanager.data.local.DatabaseHelper
 import com.animan.wholesalemanager.data.local.Expense
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import java.util.UUID
 
-class ExpenseRepository {
+class ExpenseRepository(private val context: Context) {
 
-    private val db = FirebaseFirestore.getInstance()
+    private val db by lazy { DatabaseHelper(context) }
 
-    fun addExpense(
-        expense: Expense,
-        onSuccess: () -> Unit,
-        onError: (String) -> Unit
-    ) {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid
-        val id = db.collection("expenses").document().id
-
-        val newExpense = expense.copy(id = id)
-
-        db.collection("users")
-            .document(userId!!)
-            .collection("expenses")
-            .document(id)
-            .set(newExpense)
-            .addOnSuccessListener { onSuccess() }
-            .addOnFailureListener { onError(it.message ?: "Error") }
+    fun addExpense(expense: Expense, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        val newExpense = expense.copy(id = UUID.randomUUID().toString())
+        if (db.insertExpense(newExpense)) onSuccess()
+        else onError("Failed to save expense")
     }
 
-    fun getExpenses(
+    fun getExpenses(onResult: (List<Expense>) -> Unit, onError: (String) -> Unit) {
+        try {
+            onResult(db.getAllExpenses())
+        } catch (e: Exception) {
+            onError(e.message ?: "Error loading expenses")
+        }
+    }
+
+    fun deleteExpense(id: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        if (db.deleteExpense(id)) onSuccess()
+        else onError("Failed to delete expense")
+    }
+
+    fun getExpensesByDateRange(
+        from: Long,
+        to: Long,
         onResult: (List<Expense>) -> Unit,
         onError: (String) -> Unit
     ) {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid
-
-        db.collection("users")
-            .document(userId!!)
-            .collection("expenses")
-            .get()
-            .addOnSuccessListener { result ->
-                val list = result.mapNotNull {
-                    it.toObject(Expense::class.java)
-                }
-                onResult(list)
-            }
-            .addOnFailureListener {
-                onError(it.message ?: "Error")
-            }
+        try {
+            onResult(db.getExpensesByDateRange(from, to))
+        } catch (e: Exception) {
+            onError(e.message ?: "Error loading expenses")
+        }
     }
 }

@@ -1,81 +1,78 @@
 package com.animan.wholesalemanager.viewmodel
 
+import android.app.Application
 import androidx.compose.runtime.mutableStateOf
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import com.animan.wholesalemanager.data.local.ProductReport
 import com.animan.wholesalemanager.repository.CustomerRepository
+import com.animan.wholesalemanager.repository.ExpenseRepository
 import java.text.SimpleDateFormat
 import java.util.*
 
-class ReportViewModel : ViewModel() {
+class ReportViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repository = CustomerRepository()
+    private val billRepo = CustomerRepository(app.applicationContext)
+    private val expenseRepo = ExpenseRepository(app.applicationContext)
+
     var topProducts = mutableStateOf<List<ProductReport>>(emptyList())
     var dailySales = mutableStateOf<List<Pair<String, Double>>>(emptyList())
-
     var totalSales = mutableStateOf(0.0)
     var todaySales = mutableStateOf(0.0)
     var totalBills = mutableStateOf(0)
-
+    var totalExpense = mutableStateOf(0.0)
+    var profit = mutableStateOf(0.0)
     var isLoading = mutableStateOf(false)
     var errorMessage = mutableStateOf<String?>(null)
 
-    var totalExpense = mutableStateOf(0.0)
-    var profit = mutableStateOf(0.0)
+    private val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
 
     fun fetchReport() {
-
         isLoading.value = true
 
-        profit.value = totalSales.value - totalExpense.value
+        expenseRepo.getExpenses(
+            onResult = { expenses ->
+                totalExpense.value = expenses.sumOf { it.amount }
 
-        repository.getBillsSummary(
-            onResult = { bills ->
+                billRepo.getBills(
+                    onResult = { bills ->
+                        totalBills.value = bills.size
+                        totalSales.value = bills.sumOf { it.itemsTotal }
 
-                totalBills.value = bills.size
+                        // FIX: use actual timestamp, not ID prefix
+                        val todayStart = Calendar.getInstance().apply {
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                            set(Calendar.MILLISECOND, 0)
+                        }.timeInMillis
+                        todaySales.value = bills
+                            .filter { it.timestamp >= todayStart }
+                            .sumOf { it.itemsTotal }
 
-                totalSales.value = bills.sumOf { it.itemsTotal }
-
-                val today = SimpleDateFormat("yyyyMMdd", Locale.getDefault())
-                    .format(Date())
-
-                todaySales.value = bills.filter {
-                    it.id.take(8) == today // simple date logic
-                }.sumOf { it.itemsTotal }
-
-                isLoading.value = false
+                        profit.value = totalSales.value - totalExpense.value
+                        isLoading.value = false
+                    },
+                    onError = { errorMessage.value = it; isLoading.value = false }
+                )
             },
-            onError = {
-                errorMessage.value = it
-                isLoading.value = false
-            }
+            onError = { errorMessage.value = it; isLoading.value = false }
         )
     }
 
     fun fetchTopProducts() {
-
-        isLoading.value = true
-
-        profit.value = totalSales.value - totalExpense.value
-
-        repository.getBillsSummary(
+        billRepo.getBills(
             onResult = { bills ->
-
                 val map = mutableMapOf<String, ProductReport>()
-
                 bills.forEach { bill ->
-
                     bill.items.forEach { item ->
-
                         val existing = map[item.productId]
-
-                        if (existing != null) {
-                            map[item.productId] = existing.copy(
+                        map[item.productId] = if (existing != null) {
+                            existing.copy(
                                 totalQty = existing.totalQty + item.quantity,
                                 totalRevenue = existing.totalRevenue + (item.price * item.quantity)
                             )
                         } else {
-                            map[item.productId] = ProductReport(
+                            ProductReport(
                                 productId = item.productId,
                                 name = item.name,
                                 totalQty = item.quantity,
@@ -84,43 +81,27 @@ class ReportViewModel : ViewModel() {
                         }
                     }
                 }
-
-                // 🔥 Sort by highest quantity sold
-                topProducts.value = map.values
-                    .sortedByDescending { it.totalQty }
-
-                isLoading.value = false
+                topProducts.value = map.values.sortedByDescending { it.totalQty }
             },
-            onError = {
-                errorMessage.value = it
-                isLoading.value = false
-            }
+            onError = { errorMessage.value = it }
         )
     }
 
     fun fetchDailySales() {
-
-        profit.value = totalSales.value - totalExpense.value
-
-        repository.getBillsSummary(
+        billRepo.getBills(
             onResult = { bills ->
-
                 val map = mutableMapOf<String, Double>()
-
                 bills.forEach { bill ->
-
-                    val date = bill.id.take(8) // temporary date
-
-                    val existing = map[date] ?: 0.0
-                    map[date] = existing + bill.itemsTotal
+                    // FIX: format real timestamp into a readable date string
+                    val dateKey = dateFormat.format(Date(bill.timestamp))
+                    map[dateKey] = (map[dateKey] ?: 0.0) + bill.itemsTotal
                 }
-
-                // sort by date
-                dailySales.value = map.toList().sortedBy { it.first }
+                // sort by date ascending
+                dailySales.value = map.toList().sortedBy {
+                    dateFormat.parse(it.first)?.time ?: 0L
+                }
             },
-            onError = {
-                errorMessage.value = it
-            }
+            onError = { errorMessage.value = it }
         )
     }
 }

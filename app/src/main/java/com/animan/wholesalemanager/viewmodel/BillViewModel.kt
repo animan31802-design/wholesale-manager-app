@@ -1,13 +1,15 @@
 package com.animan.wholesalemanager.viewmodel
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
 import androidx.compose.runtime.mutableStateOf
-import com.animan.wholesalemanager.repository.CustomerRepository
+import androidx.lifecycle.AndroidViewModel
 import com.animan.wholesalemanager.data.local.Bill
+import com.animan.wholesalemanager.repository.CustomerRepository
+import java.util.Calendar
 
-class BillViewModel : ViewModel() {
+class BillViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val repository = CustomerRepository()
+    private val repository = CustomerRepository(app.applicationContext)
 
     var billList = mutableStateOf<List<Bill>>(emptyList())
     var isLoading = mutableStateOf(false)
@@ -15,40 +17,34 @@ class BillViewModel : ViewModel() {
 
     fun fetchBills() {
         isLoading.value = true
-
         repository.getBills(
-            onResult = {
-                billList.value = it
-                isLoading.value = false
-            },
-            onError = {
-                errorMessage.value = it
-                isLoading.value = false
-            }
+            onResult = { billList.value = it; isLoading.value = false },
+            onError = { errorMessage.value = it; isLoading.value = false }
         )
     }
 
-    fun getTodaySummary(): Triple<Double, Double, Double> {
-
-        val todayStart = getStartOfDay()
-
-        val todayBills = billList.value.filter {
-            it.timestamp >= todayStart
-        }
-
-        val total = todayBills.sumOf { it.itemsTotal }
-        val paid = todayBills.sumOf { it.paidAmount }
-        val balance = todayBills.sumOf { it.balance }
-
-        return Triple(total, paid, balance)
+    fun fetchBillsByDateRange(from: Long, to: Long) {
+        isLoading.value = true
+        repository.getBillsByDateRange(from, to,
+            onResult = { billList.value = it; isLoading.value = false },
+            onError = { errorMessage.value = it; isLoading.value = false }
+        )
     }
 
-    private fun getStartOfDay(): Long {
-        val calendar = java.util.Calendar.getInstance()
-        calendar.set(java.util.Calendar.HOUR_OF_DAY, 0)
-        calendar.set(java.util.Calendar.MINUTE, 0)
-        calendar.set(java.util.Calendar.SECOND, 0)
-        calendar.set(java.util.Calendar.MILLISECOND, 0)
-        return calendar.timeInMillis
+    // FIX: uses actual timestamp stored in the bill, not a string prefix
+    fun getTodaySummary(): Triple<Double, Double, Double> {
+        val todayStart = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+
+        val todayBills = billList.value.filter { it.timestamp >= todayStart }
+        return Triple(
+            todayBills.sumOf { it.itemsTotal },
+            todayBills.sumOf { it.paidAmount },
+            todayBills.sumOf { it.balance }
+        )
     }
 }

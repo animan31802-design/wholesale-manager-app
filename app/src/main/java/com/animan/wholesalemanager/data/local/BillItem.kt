@@ -8,7 +8,5 @@ data class BillItem(
     val productId: String = "",
     val name: String = "",
     val price: Double = 0.0,
-    val initialQuantity: Int = 1
-) {
-    var quantity by mutableStateOf(initialQuantity)
-}
+    val quantity: Int = 1
+)

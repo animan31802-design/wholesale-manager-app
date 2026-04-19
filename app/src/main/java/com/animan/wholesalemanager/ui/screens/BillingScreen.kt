@@ -9,294 +9,218 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.animan.wholesalemanager.data.local.Customer
 import com.animan.wholesalemanager.data.local.BillItem
-import com.animan.wholesalemanager.viewmodel.CustomerViewModel
-import com.animan.wholesalemanager.viewmodel.ProductViewModel
+import com.animan.wholesalemanager.data.local.Customer
 import com.animan.wholesalemanager.printer.PrinterManager
 import com.animan.wholesalemanager.utils.LOW_STOCK_THRESHOLD
 import com.animan.wholesalemanager.utils.PdfGenerator
 import com.animan.wholesalemanager.utils.PdfGenerator.sharePdf
+import com.animan.wholesalemanager.viewmodel.CustomerViewModel
+import com.animan.wholesalemanager.viewmodel.ProductViewModel
 
 @Composable
 fun BillingScreen(
     customer: Customer,
     onBillCreated: () -> Unit
 ) {
-
     val customerViewModel: CustomerViewModel = viewModel()
     val productViewModel: ProductViewModel = viewModel()
     val printerManager = remember { PrinterManager() }
-
     val context = LocalContext.current
 
     var paidAmount by remember { mutableStateOf("") }
+    var message by remember { mutableStateOf("") }
 
-    val billItems = remember { mutableStateListOf<BillItem>() }
+    // productId -> quantity in cart (replaces mutableStateOf inside BillItem)
+    val cartQty = remember { mutableStateMapOf<String, Int>() }
 
     LaunchedEffect(Unit) {
         productViewModel.fetchProducts()
     }
+
+    // Derive BillItem list from cartQty map
+    val billItems: List<BillItem> by remember {
+        derivedStateOf {
+            productViewModel.productList.value
+                .filter { (cartQty[it.id] ?: 0) > 0 }
+                .map { product ->
+                    BillItem(
+                        productId = product.id,
+                        name = product.name,
+                        price = product.price,
+                        quantity = cartQty[product.id] ?: 1
+                    )
+                }
+        }
+    }
+
+    val itemsTotal by remember {
+        derivedStateOf { billItems.sumOf { it.price * it.quantity } }
+    }
+
+    val finalAmount = itemsTotal + customer.balance
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
-
         Text("Billing", style = MaterialTheme.typography.headlineMedium)
-
-        Spacer(modifier = Modifier.height(10.dp))
-
+        Spacer(modifier = Modifier.height(8.dp))
         Text("Customer: ${customer.name}")
-        Text("Previous Balance: ₹${customer.balance}")
+        Text("Previous balance: ₹${customer.balance}")
+        Spacer(modifier = Modifier.height(16.dp))
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Product List
         Text("Products", style = MaterialTheme.typography.titleMedium)
 
-        LazyColumn(
-            modifier = Modifier.height(200.dp) // limit height
-        ) {
-
+        LazyColumn(modifier = Modifier.height(200.dp)) {
             items(productViewModel.productList.value) { product ->
-
+                val qtyInCart = cartQty[product.id] ?: 0
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 5.dp)
+                        .padding(vertical = 4.dp)
                 ) {
-
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-
                         Column {
                             Text(product.name)
                             Text("₹${product.price}")
                             Text(
-                                text = "Stock: ${product.quantity}",
+                                "Stock: ${product.quantity}",
                                 color = if (product.quantity <= LOW_STOCK_THRESHOLD)
                                     MaterialTheme.colorScheme.error
-                                else
-                                    MaterialTheme.colorScheme.onSurface
+                                else MaterialTheme.colorScheme.onSurface
                             )
-
-                            if (product.quantity <= LOW_STOCK_THRESHOLD) {
-                                Text(
-                                    text = "⚠ Only ${product.quantity} left",
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
                         }
-
-                        val existing = billItems.find { it.productId == product.id }
-                        val currentQtyInCart = existing?.quantity ?: 0
-
                         Button(
                             onClick = {
-
-                                if (product.quantity <= currentQtyInCart) {
-                                    // Out of stock
-                                    return@Button
-                                }
-
-                                if (existing != null) {
-                                    existing.quantity++
-                                } else {
-                                    billItems.add(
-                                        BillItem(
-                                            productId = product.id,
-                                            name = product.name,
-                                            price = product.price,
-                                            initialQuantity = 1
-                                        )
-                                    )
+                                if (qtyInCart < product.quantity) {
+                                    cartQty[product.id] = qtyInCart + 1
                                 }
                             },
-                            enabled = product.quantity > currentQtyInCart
+                            enabled = product.quantity > qtyInCart
                         ) {
-                            Text(if (product.quantity == 0) "Out of Stock" else "Add")
+                            Text(if (product.quantity == 0) "Out of stock" else "Add")
                         }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Selected items", style = MaterialTheme.typography.titleMedium)
 
-        // Selected Items List
-        Text("Selected Items", style = MaterialTheme.typography.titleMedium)
-
-        LazyColumn {
-
+        LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
             items(billItems) { item ->
+                val product = productViewModel.productList.value.find { it.id == item.productId }
+                val availableStock = product?.quantity ?: 0
 
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 5.dp)
+                        .padding(vertical = 4.dp)
                 ) {
-
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-
                         Column {
                             Text(item.name)
-                            Text("₹${item.price} x ${item.quantity}")
+                            Text("₹${item.price} x ${item.quantity} = ₹${item.price * item.quantity}")
                         }
-
                         Row {
-
-                            // Decrease
                             Button(onClick = {
-                                if (item.quantity > 1) {
-                                    item.quantity--
-                                }else {
-                                    billItems.remove(item)
-                                }
-                            }) {
-                                Text("-")
-                            }
+                                val cur = cartQty[item.productId] ?: 1
+                                if (cur <= 1) cartQty.remove(item.productId)
+                                else cartQty[item.productId] = cur - 1
+                            }) { Text("-") }
 
-                            Spacer(modifier = Modifier.width(5.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
 
-                            val product = productViewModel.productList.value
-                                .find { it.id == item.productId }
-
-                            val availableStock = product?.quantity ?: 0
-
-                            // Increase
                             Button(
                                 onClick = {
-                                    if (item.quantity < availableStock) {
-                                        item.quantity++
-                                    } else {
-                                        println("Stock limit reached")
-                                    }
+                                    val cur = cartQty[item.productId] ?: 1
+                                    if (cur < availableStock) cartQty[item.productId] = cur + 1
                                 },
                                 enabled = item.quantity < availableStock
-                            ) {
-                                Text("+")
-                            }
+                            ) { Text("+") }
 
-                            Spacer(modifier = Modifier.width(5.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
 
-                            // Remove
-                            Button(onClick = {
-                                billItems.remove(item)
-                            }) {
-                                Text("X")
-                            }
+                            Button(onClick = { cartQty.remove(item.productId) }) { Text("X") }
                         }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Items total: ₹$itemsTotal")
+        Text("Previous balance: ₹${customer.balance}")
+        Text("Final amount: ₹$finalAmount", style = MaterialTheme.typography.titleMedium)
 
-        // Calculate total
-        val itemsTotal by remember {
-            derivedStateOf {
-                billItems.sumOf { it.price * it.quantity }
-            }
-        }
-
-        val finalAmount = itemsTotal + customer.balance
-
-        Text("Items Total: ₹$itemsTotal")
-        Text("Final Amount: ₹$finalAmount")
-
-        Spacer(modifier = Modifier.height(10.dp))
-
+        Spacer(modifier = Modifier.height(8.dp))
         OutlinedTextField(
             value = paidAmount,
             onValueChange = { paidAmount = it },
-            label = { Text("Paid Amount") }
+            label = { Text("Paid amount") },
+            modifier = Modifier.fillMaxWidth()
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        var message by remember { mutableStateOf("") }
+        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = {
-                if (billItems.isEmpty()) {
-                    message = "Add at least one product"
-                    return@Button
-                }
-
+                if (billItems.isEmpty()) { message = "Add at least one product"; return@Button }
                 val paid = paidAmount.toDoubleOrNull()
-
-                if (paid == null) {
-                    message = "Invalid paid amount"
-                    return@Button
-                }
-
-                if (paid < 0) {
-                    message = "Paid amount cannot be negative"
-                    return@Button
-                }
-
-                if (paid > itemsTotal + customer.balance) {
-                    message = "Paid amount exceeds total"
-                    return@Button
-                }
+                if (paid == null) { message = "Enter a valid paid amount"; return@Button }
+                if (paid < 0) { message = "Paid amount cannot be negative"; return@Button }
+                if (paid > finalAmount) { message = "Paid amount exceeds total"; return@Button }
 
                 customerViewModel.createBill(
-                    customer,
-                    billItems,
-                    itemsTotal,
-                    paid
-                ) {
-                    // Print after saving
-                    val result = printerManager.printBill(
-                        context,
-                        customer,
-                        billItems,
-                        itemsTotal,
-                        paid,
-                        finalAmount
+                    customer, billItems, itemsTotal, paid
+                ) { billId ->
+                    // FIX: pass finalAmount (total owed) not finalAmount - paid.
+                    // PrinterManager calculates balance = finalAmount - paidAmount internally.
+                    val printResult = printerManager.printBill(
+                        context, customer, billItems, itemsTotal, paid, finalAmount
                     )
 
-                    message = "Bill saved. $result"
-
+                    val balance = finalAmount - paid
                     val file = PdfGenerator.generateBillPdf(
-                        context,
-                        customer,
-                        billItems,
-                        itemsTotal,
-                        paid,
-                        finalAmount - paid
+                        context, customer, billItems, itemsTotal, paid, balance
                     )
-
                     sharePdf(context, file)
 
+                    message = "Bill saved. $printResult"
+                    cartQty.clear()
                     onBillCreated()
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = billItems.isNotEmpty() || !customerViewModel.isLoading.value
+            enabled = billItems.isNotEmpty() && !customerViewModel.isLoading.value
         ) {
-            Text("Save Bill")
+            if (customerViewModel.isLoading.value) {
+                CircularProgressIndicator(strokeWidth = 2.dp)
+            } else {
+                Text("Save bill")
+            }
         }
 
         if (message.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(message, color = MaterialTheme.colorScheme.primary)
+        }
 
-            Text(
-                text = message,
-                color = MaterialTheme.colorScheme.primary
-            )
+        customerViewModel.errorMessage.value?.let {
+            Text(it, color = MaterialTheme.colorScheme.error)
         }
     }
 }

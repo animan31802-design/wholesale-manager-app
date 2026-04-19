@@ -1,122 +1,83 @@
 package com.animan.wholesalemanager
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.navigation.compose.*
-import com.animan.wholesalemanager.ui.screens.AddCustomerScreen
-import com.animan.wholesalemanager.ui.screens.AddProductScreen
-import com.animan.wholesalemanager.ui.screens.BillingWrapperScreen
-import com.animan.wholesalemanager.ui.screens.CustomerListScreen
-import com.animan.wholesalemanager.ui.screens.DashboardScreen
-import com.animan.wholesalemanager.ui.screens.LoginScreen
-import com.animan.wholesalemanager.ui.screens.ProductListScreen
-
-import android.Manifest
-import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.animan.wholesalemanager.data.local.Customer
-import com.animan.wholesalemanager.ui.screens.BillHistoryScreen
-import com.animan.wholesalemanager.ui.screens.ExpenseScreen
-import com.animan.wholesalemanager.ui.screens.LedgerScreen
-import com.animan.wholesalemanager.ui.screens.ReportScreen
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.animan.wholesalemanager.ui.screens.*
+import com.animan.wholesalemanager.ui.theme.WholesaleManagerTheme
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         requestBluetoothPermission()
 
         setContent {
+            WholesaleManagerTheme {
+                val navController = rememberNavController()
+                val isLoggedIn = com.google.firebase.auth.FirebaseAuth
+                    .getInstance().currentUser != null
 
-            val navController = rememberNavController()
-
-            val isLoggedIn = com.google.firebase.auth.FirebaseAuth
-                .getInstance()
-                .currentUser != null
-
-            NavHost(
-                navController = navController,
-                startDestination = if (isLoggedIn) "dashboard" else "login"
-            ) {
-
-                composable("login") {
-                    LoginScreen(
-                        onLoginSuccess = {
+                NavHost(
+                    navController = navController,
+                    startDestination = if (isLoggedIn) "dashboard" else "login"
+                ) {
+                    composable("login") {
+                        LoginScreen(onLoginSuccess = {
                             navController.navigate("dashboard") {
                                 popUpTo("login") { inclusive = true }
                             }
-                        }
-                    )
-                }
+                        })
+                    }
 
-                composable("dashboard") {
-                    DashboardScreen(navController)
-                }
+                    composable("dashboard") { DashboardScreen(navController) }
 
-                composable("add_customer") {
-                    AddCustomerScreen(
-                        onCustomerAdded = {
-                            navController.popBackStack() // go back to dashboard
-                        }
-                    )
-                }
+                    composable("add_customer") {
+                        AddCustomerScreen(onCustomerAdded = { navController.popBackStack() })
+                    }
 
-                composable("customer_list") {
-                    CustomerListScreen(navController)
-                }
+                    composable("customer_list") { CustomerListScreen(navController) }
 
-                composable("billing/{customerId}") { backStackEntry ->
+                    composable("billing/{customerId}") { backStackEntry ->
+                        val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
+                        BillingWrapperScreen(customerId = customerId, navController = navController)
+                    }
 
-                    val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
+                    composable("product_list") { ProductListScreen(navController) }
 
-                    BillingWrapperScreen(
-                        customerId = customerId,
-                        navController = navController
-                    )
-                }
+                    composable("add_product") { AddProductScreen(navController) }
 
-                composable("product_list") {
-                    ProductListScreen(navController)
-                }
+                    composable("edit_product/{productId}") { backStackEntry ->
+                        val productId = backStackEntry.arguments?.getString("productId") ?: ""
+                        AddProductScreen(navController, productId)
+                    }
 
-                composable("add_product") {
-                    AddProductScreen(navController)
-                }
+                    composable("expenses") { ExpenseScreen() }
 
-                composable("edit_product/{productId}") { backStackEntry ->
-                    val productId = backStackEntry.arguments?.getString("productId") ?: ""
-                    AddProductScreen(navController, productId)
-                }
+                    composable("reports") { ReportScreen() }
 
-                composable("expenses") {
-                    ExpenseScreen()
-                }
+                    composable("bill_history") { BillHistoryScreen(navController) }
 
-                composable("reports") {
-                    ReportScreen()
-                }
-
-                composable("bill_history") {
-                    BillHistoryScreen(navController)
-                }
-                composable("ledger/{customerId}") { backStackEntry ->
-                    val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
-
-                    LedgerScreen(
-                        customer = Customer(id = customerId, name = "")
-                    )
+                    // FIX: uses LedgerWrapperScreen — resolves full Customer before rendering
+                    composable("ledger/{customerId}") { backStackEntry ->
+                        val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
+                        LedgerWrapperScreen(customerId = customerId, navController = navController)
+                    }
                 }
             }
         }
     }
 
-    fun requestBluetoothPermission() {
+    private fun requestBluetoothPermission() {
         if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.BLUETOOTH_CONNECT
+                this, Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
         ) {
             ActivityCompat.requestPermissions(
