@@ -372,6 +372,7 @@ fun AppDrawer(
         }
 
         DrawerItem("Printer Setup", Icons.Default.Print) {
+            navController.navigate("printer_selector")
             onItemClick()
         }
 

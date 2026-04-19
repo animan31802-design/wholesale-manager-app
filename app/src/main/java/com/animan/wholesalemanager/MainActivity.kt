@@ -29,18 +29,42 @@ class MainActivity : ComponentActivity() {
                     navController = navController,
                     startDestination = if (isLoggedIn) "dashboard" else "login"
                 ) {
+
                     composable("login") {
-                        LoginScreen(onLoginSuccess = {
-                            navController.navigate("dashboard") {
-                                popUpTo("login") { inclusive = true }
+                        LoginScreen(
+                            onLoginSuccess = {
+                                navController.navigate("dashboard") {
+                                    popUpTo("login") { inclusive = true }
+                                }
+                            },
+                            onNavigateToRegister = {
+                                navController.navigate("register")
                             }
-                        })
+                        )
+                    }
+
+                    composable("register") {
+                        RegisterScreen(
+                            onRegisterSuccess = {
+                                navController.navigate("dashboard") {
+                                    popUpTo("register") { inclusive = true }
+                                }
+                            },
+                            onNavigateToLogin = {
+                                navController.popBackStack()
+                            }
+                        )
                     }
 
                     composable("dashboard") { DashboardScreen(navController) }
 
+                    // add_customer and edit_customer share the same screen
                     composable("add_customer") {
-                        AddCustomerScreen(onCustomerAdded = { navController.popBackStack() })
+                        AddCustomerScreen(navController = navController)
+                    }
+                    composable("edit_customer/{customerId}") { backStackEntry ->
+                        val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
+                        AddCustomerScreen(navController = navController, customerId = customerId)
                     }
 
                     composable("customer_list") { CustomerListScreen(navController) }
@@ -48,6 +72,11 @@ class MainActivity : ComponentActivity() {
                     composable("billing/{customerId}") { backStackEntry ->
                         val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
                         BillingWrapperScreen(customerId = customerId, navController = navController)
+                    }
+
+                    composable("payment/{customerId}") { backStackEntry ->
+                        val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
+                        PaymentEntryScreen(customerId = customerId, navController = navController)
                     }
 
                     composable("product_list") { ProductListScreen(navController) }
@@ -65,10 +94,13 @@ class MainActivity : ComponentActivity() {
 
                     composable("bill_history") { BillHistoryScreen(navController) }
 
-                    // FIX: uses LedgerWrapperScreen — resolves full Customer before rendering
                     composable("ledger/{customerId}") { backStackEntry ->
                         val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
                         LedgerWrapperScreen(customerId = customerId, navController = navController)
+                    }
+
+                    composable("printer_selector") {
+                        PrinterSelectorScreen(navController)
                     }
                 }
             }

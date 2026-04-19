@@ -12,19 +12,20 @@ class AuthViewModel : ViewModel() {
     var errorMessage = mutableStateOf<String?>(null)
 
     fun login(email: String, password: String, onSuccess: () -> Unit) {
+        if (email.isBlank()) { errorMessage.value = "Email cannot be empty"; return }
+        if (password.isBlank()) { errorMessage.value = "Password cannot be empty"; return }
         isLoading.value = true
+        authHelper.login(email, password,
+            onSuccess = { isLoading.value = false; onSuccess() },
+            onError = { isLoading.value = false; errorMessage.value = it }
+        )
+    }
 
-        authHelper.login(
-            email,
-            password,
-            onSuccess = {
-                isLoading.value = false
-                onSuccess()
-            },
-            onError = {
-                isLoading.value = false
-                errorMessage.value = it
-            }
+    fun register(email: String, password: String, onSuccess: () -> Unit) {
+        isLoading.value = true
+        authHelper.register(email, password,
+            onSuccess = { isLoading.value = false; onSuccess() },
+            onError = { isLoading.value = false; errorMessage.value = it }
         )
     }
 }

@@ -9,126 +9,77 @@ import androidx.core.content.ContextCompat
 import com.animan.wholesalemanager.data.local.BillItem
 import com.animan.wholesalemanager.data.local.Customer
 import com.animan.wholesalemanager.utils.BluetoothPrinter
+import com.animan.wholesalemanager.utils.PrinterPreferences
 
 class PrinterManager {
 
     private val printer = BluetoothPrinter()
 
-    // Get paired devices safely
     private fun getPairedDevices(context: Context): Set<BluetoothDevice>? {
-
         if (ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_CONNECT
+                context, Manifest.permission.BLUETOOTH_CONNECT
             ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            return null
-        }
-
-        val bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
-        return bluetoothAdapter?.bondedDevices
+        ) return null
+        return BluetoothAdapter.getDefaultAdapter()?.bondedDevices
     }
 
-    // PRINT REAL BILL
+    // Resolves the saved printer address from SharedPreferences.
+    // Falls back to any device whose name contains "printer" if nothing saved.
+    private fun resolveDevice(context: Context): Pair<BluetoothDevice?, String> {
+        val devices = getPairedDevices(context)
+            ?: return null to "Bluetooth permission not granted"
+
+        if (devices.isEmpty()) return null to "No paired Bluetooth devices found"
+
+        val savedAddress = PrinterPreferences.getSavedAddress(context)
+
+        if (savedAddress != null) {
+            val device = devices.firstOrNull { it.address == savedAddress }
+            if (device != null) return device to ""
+            return null to "Saved printer not found — please re-select in Settings"
+        }
+
+        // Fallback: first device whose name contains "printer" (case-insensitive)
+        val fallback = devices.firstOrNull {
+            try { it.name.contains("printer", ignoreCase = true) }
+            catch (e: SecurityException) { false }
+        }
+        return if (fallback != null) fallback to ""
+        else null to "No printer selected. Go to Settings → Select printer."
+    }
+
     fun printBill(
         context: Context,
         customer: Customer,
         items: List<BillItem>,
         itemsTotal: Double,
         paidAmount: Double,
-        finalAmount: Double
+        finalAmount: Double    // total owed (itemsTotal + previous balance)
     ): String {
+        val (device, error) = resolveDevice(context)
+        if (device == null) return error
 
-        val devices = getPairedDevices(context)
-            ?: return "Bluetooth permission not granted"
-
-        // Debug devices
-        devices.forEach {
-            try {
-                println("Device: ${it.name}")
-            } catch (e: SecurityException) {
-                println("No permission to read device name")
-            }
-        }
-
-        val device = devices.firstOrNull {
-            try {
-                it.name.equals("BTprinter013830", ignoreCase = true)
-            } catch (e: SecurityException) {
-                false
-            }
-        } ?: return "Printer not found (BTprinter013830)"
-
-        val connected = printer.connect(device)
-        if (!connected) return "Printer connection failed"
+        if (!printer.connect(device)) return "Printer connection failed"
 
         val balance = finalAmount - paidAmount
-
-        val receipt = buildReceipt(
-            customer.name,
-            items,
-            itemsTotal,
-            paidAmount,
-            balance
-        )
-
+        val receipt = buildReceipt(customer.name, items, itemsTotal, paidAmount, balance)
         printer.print(receipt)
         printer.disconnect()
-
         return "Printed successfully"
     }
 
-    // PRINT TEST BILL
     fun printTestBill(context: Context): String {
+        val (device, error) = resolveDevice(context)
+        if (device == null) return error
 
-        val devices = getPairedDevices(context)
-            ?: return "Bluetooth permission not granted"
+        if (!printer.connect(device)) return "Printer connection failed"
 
-        devices.forEach {
-            try {
-                println("Device: ${it.name}")
-            } catch (e: SecurityException) {
-                println("No permission to read device name")
-            }
-        }
-
-        val device = devices.firstOrNull {
-            try {
-                it.name.equals("BTprinter013830", ignoreCase = true)
-            } catch (e: SecurityException) {
-                false
-            }
-        } ?: return "Printer not found (BTprinter013830)"
-
-        val connected = printer.connect(device)
-        if (!connected) return "Printer connection failed"
-
-        val receipt = """
-            MY SHOP
-            ------------------------------
-            Customer: TEST USER
-            ------------------------------
-            Item        Qty   Price   Total
-            Rice         2     50      100
-            Oil          1     100     100
-            ------------------------------
-            Total:              200
-            Paid:               150
-            Balance:            50
-            ------------------------------
-            Thank You! Visit Again
-            
-            
-            
-        """.trimIndent()
-
-        printer.print(receipt + "\n\n\n")
+        val receipt = buildTestReceipt()
+        printer.print(receipt)
         printer.disconnect()
-
         return "Test print successful"
     }
 
-    // Receipt Builder
     private fun buildReceipt(
         customerName: String,
         items: List<BillItem>,
@@ -136,16 +87,12 @@ class PrinterManager {
         paid: Double,
         balance: Double
     ): String {
-
         val sb = StringBuilder()
-
         sb.append("\n")
         sb.append(centerText("MY SHOP"))
         sb.append("------------------------------\n")
-
         sb.append("Customer: $customerName\n")
         sb.append("------------------------------\n")
-
         sb.append(formatRow("Item", "Qty", "Price", "Total"))
         sb.append("------------------------------\n")
 
@@ -162,15 +109,34 @@ class PrinterManager {
         }
 
         sb.append("------------------------------\n")
-
-        sb.append(rightAlign("Total: ₹${total.toInt()}"))
-        sb.append(rightAlign("Paid: ₹${paid.toInt()}"))
-        sb.append(rightAlign("Balance: ₹${balance.toInt()}"))
-
+        sb.append(rightAlign("Total: Rs.${total.toInt()}"))
+        sb.append(rightAlign("Paid:  Rs.${paid.toInt()}"))
+        sb.append(rightAlign("Bal:   Rs.${balance.toInt()}"))
         sb.append("------------------------------\n")
-        sb.append(centerText("Thank You! Visit Again\n\n\n"))
-
+        sb.append(centerText("Thank You! Visit Again"))
+        sb.append("\n\n\n")
         return sb.toString()
+    }
+
+    private fun buildTestReceipt(): String {
+        return """
+            |MY SHOP
+            |------------------------------
+            |Customer: TEST USER
+            |------------------------------
+            |Item        Qty   Price   Total
+            |Rice          2      50     100
+            |Oil           1     100     100
+            |------------------------------
+            |Total:              200
+            |Paid:               150
+            |Bal:                 50
+            |------------------------------
+            |Thank You! Visit Again
+            |
+            |
+            |
+        """.trimMargin()
     }
 
     private fun centerText(text: String): String {

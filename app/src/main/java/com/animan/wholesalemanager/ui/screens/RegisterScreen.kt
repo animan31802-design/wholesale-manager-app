@@ -14,15 +14,17 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.animan.wholesalemanager.viewmodel.AuthViewModel
 
 @Composable
-fun LoginScreen(
-    onLoginSuccess: () -> Unit = {},
-    onNavigateToRegister: () -> Unit = {}
+fun RegisterScreen(
+    onRegisterSuccess: () -> Unit = {},
+    onNavigateToLogin: () -> Unit = {}
 ) {
     val viewModel: AuthViewModel = viewModel()
 
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
+    var localError by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -30,13 +32,13 @@ fun LoginScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Login", style = MaterialTheme.typography.headlineMedium)
+        Text("Create account", style = MaterialTheme.typography.headlineMedium)
 
         Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
             value = email,
-            onValueChange = { email = it },
+            onValueChange = { email = it; localError = null },
             label = { Text("Email") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
@@ -46,7 +48,7 @@ fun LoginScreen(
 
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = { password = it; localError = null },
             label = { Text("Password") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
@@ -63,32 +65,56 @@ fun LoginScreen(
             }
         )
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        OutlinedTextField(
+            value = confirmPassword,
+            onValueChange = { confirmPassword = it; localError = null },
+            label = { Text("Confirm password") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation()
+        )
+
         Spacer(modifier = Modifier.height(20.dp))
 
-        viewModel.errorMessage.value?.let {
-            Text(it, color = MaterialTheme.colorScheme.error)
+        val error = localError ?: viewModel.errorMessage.value
+        if (error != null) {
+            Text(error, color = MaterialTheme.colorScheme.error)
             Spacer(modifier = Modifier.height(8.dp))
         }
 
         Button(
-            onClick = { viewModel.login(email.trim(), password.trim()) { onLoginSuccess() } },
+            onClick = {
+                localError = when {
+                    email.isBlank() -> "Email cannot be empty"
+                    password.length < 6 -> "Password must be at least 6 characters"
+                    password != confirmPassword -> "Passwords do not match"
+                    else -> null
+                }
+                if (localError != null) return@Button
+
+                viewModel.register(email.trim(), password.trim()) {
+                    onRegisterSuccess()
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             enabled = !viewModel.isLoading.value
         ) {
             if (viewModel.isLoading.value) {
                 CircularProgressIndicator(strokeWidth = 2.dp)
             } else {
-                Text("Login")
+                Text("Register")
             }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(
-            onClick = onNavigateToRegister,
+            onClick = onNavigateToLogin,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("Don't have an account? Register")
+            Text("Already have an account? Login")
         }
     }
 }
