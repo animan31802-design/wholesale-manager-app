@@ -9,6 +9,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.QrCode
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -26,8 +27,10 @@ import com.animan.wholesalemanager.data.local.BillItem
 import com.animan.wholesalemanager.data.local.Customer
 import com.animan.wholesalemanager.data.local.Product
 import com.animan.wholesalemanager.printer.PrinterManager
+import com.animan.wholesalemanager.ui.components.UpiPaymentDialog
 import com.animan.wholesalemanager.utils.PdfGenerator
 import com.animan.wholesalemanager.utils.PdfGenerator.sharePdf
+import com.animan.wholesalemanager.utils.WhatsAppShare
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
 import kotlinx.coroutines.delay
@@ -147,10 +150,17 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
                         val printResult = printerManager.printBill(
                             context, customer, billItems, itemsTotal, paid, totalOwed
                         )
+                        val balanceLeft = totalOwed - paid
                         val file = PdfGenerator.generateBillPdf(
-                            context, customer, billItems, itemsTotal, gstTotal, paid, totalOwed - paid
+                            context, customer, billItems, itemsTotal, gstTotal, paid, balanceLeft
                         )
-                        sharePdf(context, file)
+
+                        //sharePdf(context, file)
+
+                        // WhatsApp text summary (no extra tap needed — fires alongside PDF)
+                        // Comment this out if you only want PDF share
+                        WhatsAppShare.shareTextSummary(context, customer, billItems, grandTotal, paid, balanceLeft)
+
                         message = "Bill saved. $printResult"
                         cartQty.clear()
                         onBillCreated()
@@ -296,6 +306,10 @@ private fun CartView(
     onRemove: (BillItem) -> Unit,
     onSaveBill: () -> Unit
 ) {
+
+    var showUpiDialog by remember { mutableStateOf(false) }
+    var upiAmount     by remember { mutableStateOf(0.0) }
+
     LazyColumn(modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
@@ -378,6 +392,21 @@ private fun CartView(
             }
         }
 
+        item {
+            // UPI QR Pay button
+            OutlinedButton(
+                onClick = {
+                    upiAmount = totalOwed - (paidAmount.toDoubleOrNull() ?: 0.0)
+                    if (upiAmount > 0) showUpiDialog = true
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Filled.QrCode, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Pay via UPI QR")
+            }
+        }
+
         if (message.isNotEmpty()) item { Text(message, color = MaterialTheme.colorScheme.primary) }
         errorMessage?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
 
@@ -388,5 +417,18 @@ private fun CartView(
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
+
+    if (showUpiDialog) {
+        UpiPaymentDialog(
+            amount = upiAmount,
+            billNote = "Invoice",
+            onMarkPaid = {
+                // Set paid amount to full remaining balance
+                onPaidAmountChange(upiAmount.toInt().toString())
+                showUpiDialog = false
+            },
+            onDismiss = { showUpiDialog = false }
+        )
     }
 }

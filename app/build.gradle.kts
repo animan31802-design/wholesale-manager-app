@@ -65,4 +65,5 @@ dependencies {
     implementation("com.itextpdf:itext7-core:7.2.5")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    implementation("com.google.zxing:core:3.5.3")
 }

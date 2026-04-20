@@ -16,6 +16,7 @@ import androidx.navigation.NavController
 import com.animan.wholesalemanager.data.local.Bill
 import com.animan.wholesalemanager.data.local.Customer
 import com.animan.wholesalemanager.printer.PrinterManager
+import com.animan.wholesalemanager.utils.WhatsAppShare
 import com.animan.wholesalemanager.viewmodel.BillViewModel
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 import java.text.SimpleDateFormat
@@ -153,6 +154,23 @@ fun BillHistoryScreen(navController: NavController) {
                                             colors = ButtonDefaults.outlinedButtonColors(
                                                 contentColor = MaterialTheme.colorScheme.error)
                                         ) { Text("Refund") }
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                WhatsAppShare.shareTextSummary(
+                                                    context,
+                                                    Customer(bill.customerId, bill.customerName, phone = ""),
+                                                    bill.items,
+                                                    bill.grandTotal,
+                                                    bill.paidAmount,
+                                                    bill.balance
+                                                )
+                                            },
+                                            modifier = Modifier.height(32.dp),
+                                            contentPadding = PaddingValues(horizontal = 12.dp)
+                                        ) {
+                                            Text("WhatsApp")
+                                        }
                                     }
                                 }
                             }

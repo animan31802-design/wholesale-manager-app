@@ -6,6 +6,7 @@ object AppPreferences {
     private const val PREF_NAME = "app_prefs"
 
     private const val KEY_SHOP_NAME        = "shop_name"
+    private const val KEY_UPI_ID           = "upi_id"
     private const val KEY_BACKUP_ENABLED   = "backup_enabled"
     private const val KEY_BACKUP_FREQUENCY = "backup_frequency"
     private const val KEY_LAST_BACKUP      = "last_backup_time"
@@ -17,6 +18,11 @@ object AppPreferences {
         prefs(context).getString(KEY_SHOP_NAME, "My Shop") ?: "My Shop"
     fun setShopName(context: Context, name: String) =
         prefs(context).edit().putString(KEY_SHOP_NAME, name).apply()
+
+    fun getUpiId(context: Context): String =
+        prefs(context).getString(KEY_UPI_ID, "") ?: ""
+    fun setUpiId(context: Context, id: String) =
+        prefs(context).edit().putString(KEY_UPI_ID, id).apply()
 
     fun isBackupEnabled(context: Context): Boolean =
         prefs(context).getBoolean(KEY_BACKUP_ENABLED, false)
