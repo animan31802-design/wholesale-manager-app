@@ -29,7 +29,6 @@ class MainActivity : ComponentActivity() {
                     navController = navController,
                     startDestination = if (isLoggedIn) "dashboard" else "login"
                 ) {
-
                     composable("login") {
                         LoginScreen(
                             onLoginSuccess = {
@@ -37,12 +36,9 @@ class MainActivity : ComponentActivity() {
                                     popUpTo("login") { inclusive = true }
                                 }
                             },
-                            onNavigateToRegister = {
-                                navController.navigate("register")
-                            }
+                            onNavigateToRegister = { navController.navigate("register") }
                         )
                     }
-
                     composable("register") {
                         RegisterScreen(
                             onRegisterSuccess = {
@@ -50,72 +46,54 @@ class MainActivity : ComponentActivity() {
                                     popUpTo("register") { inclusive = true }
                                 }
                             },
-                            onNavigateToLogin = {
-                                navController.popBackStack()
-                            }
+                            onNavigateToLogin = { navController.popBackStack() }
                         )
                     }
-
-                    composable("dashboard") { DashboardScreen(navController) }
-
-                    // add_customer and edit_customer share the same screen
-                    composable("add_customer") {
-                        AddCustomerScreen(navController = navController)
-                    }
+                    composable("dashboard")      { DashboardScreen(navController) }
+                    composable("add_customer")   { AddCustomerScreen(navController = navController) }
                     composable("edit_customer/{customerId}") { backStackEntry ->
-                        val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
-                        AddCustomerScreen(navController = navController, customerId = customerId)
+                        AddCustomerScreen(navController, backStackEntry.arguments?.getString("customerId"))
                     }
-
-                    composable("customer_list") { CustomerListScreen(navController) }
-
+                    composable("customer_list")  { CustomerListScreen(navController) }
                     composable("billing/{customerId}") { backStackEntry ->
-                        val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
-                        BillingWrapperScreen(customerId = customerId, navController = navController)
+                        BillingWrapperScreen(
+                            backStackEntry.arguments?.getString("customerId") ?: "",
+                            navController
+                        )
                     }
-
                     composable("payment/{customerId}") { backStackEntry ->
-                        val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
-                        PaymentEntryScreen(customerId = customerId, navController = navController)
+                        PaymentEntryScreen(
+                            backStackEntry.arguments?.getString("customerId") ?: "",
+                            navController
+                        )
                     }
-
-                    composable("product_list") { ProductListScreen(navController) }
-
-                    composable("add_product") { AddProductScreen(navController) }
-
+                    composable("product_list")   { ProductListScreen(navController) }
+                    composable("add_product")    { AddProductScreen(navController) }
                     composable("edit_product/{productId}") { backStackEntry ->
-                        val productId = backStackEntry.arguments?.getString("productId") ?: ""
-                        AddProductScreen(navController, productId)
+                        AddProductScreen(navController, backStackEntry.arguments?.getString("productId"))
                     }
-
-                    composable("expenses") { ExpenseScreen() }
-
-                    composable("reports") { ReportScreen() }
-
-                    composable("bill_history") { BillHistoryScreen(navController) }
-
+                    composable("expenses")       { ExpenseScreen() }
+                    composable("reports")        { ReportScreen() }
+                    composable("bill_history")   { BillHistoryScreen(navController) }
                     composable("ledger/{customerId}") { backStackEntry ->
-                        val customerId = backStackEntry.arguments?.getString("customerId") ?: ""
-                        LedgerWrapperScreen(customerId = customerId, navController = navController)
+                        LedgerWrapperScreen(
+                            backStackEntry.arguments?.getString("customerId") ?: "",
+                            navController
+                        )
                     }
-
-                    composable("printer_selector") {
-                        PrinterSelectorScreen(navController)
-                    }
+                    composable("printer_selector") { PrinterSelectorScreen(navController) }
+                    composable("settings")         { SettingsScreen(navController) }
                 }
             }
         }
     }
 
     private fun requestBluetoothPermission() {
-        if (ContextCompat.checkSelfPermission(
-                this, Manifest.permission.BLUETOOTH_CONNECT
-            ) != PackageManager.PERMISSION_GRANTED
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
+            != PackageManager.PERMISSION_GRANTED
         ) {
             ActivityCompat.requestPermissions(
-                this,
-                arrayOf(Manifest.permission.BLUETOOTH_CONNECT),
-                1
+                this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1
             )
         }
     }

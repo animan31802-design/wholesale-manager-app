@@ -1,20 +1,25 @@
 package com.animan.wholesalemanager.ui.screens
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.Today
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -29,101 +34,333 @@ fun ReportScreen() {
 
     val viewModel: ReportViewModel = viewModel()
 
+    var selectedFilter by remember { mutableStateOf("Today") }
+
     LaunchedEffect(Unit) {
         viewModel.fetchReport()
         viewModel.fetchTopProducts()
         viewModel.fetchDailySales()
     }
 
-    LazyColumn(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
+            .background(MaterialTheme.colorScheme.background)
     ) {
 
-        // 🔹 Title
-        item {
-            Text("Reports", style = MaterialTheme.typography.headlineMedium)
-            Spacer(modifier = Modifier.height(20.dp))
-        }
+        LazyColumn {
 
-        // 🔹 Loading
-        if (viewModel.isLoading.value) {
+            // 🔥 HEADER
+            item { ReportHeader() }
+
+            // 🔥 CONTENT
             item {
-                CircularProgressIndicator()
-            }
-        }
-
-        // 🔹 Summary Card
-        item {
-            Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Total Sales: ₹${viewModel.totalSales.value}")
-                    Text("Today's Sales: ₹${viewModel.todaySales.value}")
-                    Text("Total Bills: ${viewModel.totalBills.value}")
+
+                    if (viewModel.isLoading.value) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    ReportFilters(selected = selectedFilter) { selected ->
+                        selectedFilter = selected
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // KPI GRID
+                    KPISection(viewModel)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    InsightCard(viewModel)
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    PremiumSection("Daily Sales") {
+                        DailySalesLineChart(viewModel.dailySales.value)
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    PremiumSection("Top Products Chart") {
+                        TopProductsBarChart(viewModel.topProducts.value)
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        "Top Products",
+                        style = MaterialTheme.typography.titleLarge
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Total Expense: ₹${viewModel.totalExpense.value}")
-                    Text("Profit: ₹${viewModel.profit.value}")
-                }
+            items(viewModel.topProducts.value) { product ->
+                PremiumProductItem(product)
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-        }
-
-        // 🔹 Top Products List
-        item {
-            Text("Top Selling Products", style = MaterialTheme.typography.titleMedium)
-        }
-
-        items(viewModel.topProducts.value) { product ->
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 5.dp)
-            ) {
-
-                Column(modifier = Modifier.padding(10.dp)) {
-
-                    Text(product.name)
-                    Text("Sold: ${product.totalQty}")
-                    Text("Revenue: ₹${product.totalRevenue}")
+            item {
+                viewModel.errorMessage.value?.let {
+                    Text(
+                        it,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(16.dp)
+                    )
                 }
-            }
-        }
-
-        // Chart: Top Products
-        item {
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text("Top Products Chart")
-
-            TopProductsBarChart(viewModel.topProducts.value)
-        }
-
-        // Chart: Daily Sales
-        item {
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text("Daily Sales Chart")
-
-            DailySalesLineChart(viewModel.dailySales.value)
-        }
-
-        // 🔹 Error
-        item {
-            viewModel.errorMessage.value?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
             }
         }
     }
 }
+
+@Composable
+fun KPISection(viewModel: ReportViewModel) {
+
+    Column {
+
+        Row {
+            PremiumReportCard(
+                "Total Sales",
+                viewModel.totalSales.value,
+                Icons.Default.AttachMoney,
+                Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(10.dp))
+            PremiumReportCard(
+                "Today",
+                viewModel.todaySales.value,
+                Icons.Default.Today,
+                Modifier.weight(1f)
+            )
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Row {
+            PremiumReportCard(
+                "Profit",
+                viewModel.profit.value,
+                Icons.Default.TrendingUp,
+                Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(10.dp))
+            PremiumReportCard(
+                "Expense",
+                viewModel.totalExpense.value,
+                Icons.Default.Warning,
+                Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+fun ReportHeader() {
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(150.dp)
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.secondary
+                    )
+                )
+            )
+            .padding(20.dp)
+    ) {
+
+        Column(
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxHeight()
+        ) {
+            Text(
+                "Reports Dashboard",
+                style = MaterialTheme.typography.headlineMedium,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+
+            Text(
+                "Your business insights",
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
+            )
+        }
+    }
+}
+
+@Composable
+fun ReportFilters(selected: String, onSelect: (String) -> Unit) {
+
+    val filters = listOf("Today", "Week", "Month")
+
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.horizontalScroll(rememberScrollState())
+    ) {
+        filters.forEach { label ->
+
+            FilterChip(
+                selected = selected == label,
+                onClick = { onSelect(label) },
+                label = { Text(label) }
+            )
+        }
+    }
+}
+
+@Composable
+fun AnimatedNumber(target: Double): String {
+
+    val animatedValue by animateFloatAsState(
+        targetValue = target.toFloat(),
+        animationSpec = tween(1000)
+    )
+
+    return "₹${animatedValue.toInt()}"
+}
+
+@Composable
+fun PremiumReportCard(
+    title: String,
+    value: Double,
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
+
+    val animatedValue = AnimatedNumber(value)
+
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(8.dp)
+    ) {
+
+        Column(
+            modifier = Modifier
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    )
+                )
+                .padding(16.dp)
+        ) {
+
+            Icon(icon, contentDescription = null)
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(title, style = MaterialTheme.typography.bodySmall)
+
+            Text(
+                animatedValue,
+                style = MaterialTheme.typography.headlineSmall
+            )
+        }
+    }
+}
+
+@Composable
+fun InsightCard(viewModel: ReportViewModel) {
+
+    val profit = viewModel.profit.value
+    val today = viewModel.todaySales.value
+
+    val message = when {
+        profit > 0 -> "You're making profit 📈"
+        profit < 0 -> "Loss detected ⚠️"
+        else -> "No profit yet"
+    }
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+
+        Column(modifier = Modifier.padding(16.dp)) {
+
+            Text("Insights", style = MaterialTheme.typography.titleMedium)
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(message)
+
+            Text("Today's Sales: ₹$today")
+        }
+    }
+}
+
+@Composable
+fun PremiumSection(title: String, content: @Composable () -> Unit) {
+
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(6.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+
+        Column(
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(16.dp)
+        ) {
+
+            Text(title, style = MaterialTheme.typography.titleMedium)
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Box(modifier = Modifier.padding(top = 8.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+fun PremiumProductItem(product: ProductReport) {
+
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(4.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
+
+        Row(
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Column {
+                Text(product.name, style = MaterialTheme.typography.titleMedium)
+                Text("Sold: ${product.totalQty}")
+            }
+
+            Text(
+                "₹${product.totalRevenue}",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+}
+
 
 @Composable
 fun DailySalesLineChart(dataList: List<Pair<String, Double>>) {
@@ -142,7 +379,11 @@ fun DailySalesLineChart(dataList: List<Pair<String, Double>>) {
 
             val labels = dataList.map { it.first } // dates
 
-            val dataSet = LineDataSet(entries, "Daily Sales")
+            val dataSet = LineDataSet(entries, "").apply {
+                mode = LineDataSet.Mode.CUBIC_BEZIER   // smooth curve
+                setDrawCircles(false)
+                lineWidth = 3f
+            }
             val data = LineData(dataSet)
 
             chart.data = data

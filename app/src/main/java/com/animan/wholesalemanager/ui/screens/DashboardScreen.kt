@@ -1,48 +1,46 @@
 package com.animan.wholesalemanager.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
-import com.animan.wholesalemanager.printer.PrinterManager
-import com.google.firebase.auth.FirebaseAuth
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.animan.wholesalemanager.utils.LOW_STOCK_THRESHOLD
+import androidx.navigation.NavController
+import com.animan.wholesalemanager.printer.PrinterManager
 import com.animan.wholesalemanager.viewmodel.BillViewModel
 import com.animan.wholesalemanager.viewmodel.ExpenseViewModel
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(navController: NavController) {
 
+    val billViewModel: BillViewModel = viewModel()
+    val expenseViewModel: ExpenseViewModel = viewModel()
+    val productViewModel: ProductViewModel = viewModel()
+    val printerManager = remember { PrinterManager() }
+    val context = LocalContext.current
+
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
 
-    val productViewModel: ProductViewModel = viewModel()
+    LaunchedEffect(Unit) {
+        billViewModel.fetchBills()
+        expenseViewModel.fetchExpenses()
+        productViewModel.fetchLowStockProducts()
+    }
 
-    val lowStockCount = productViewModel.productList.value
-        .count { it.quantity <= LOW_STOCK_THRESHOLD }
+    val lowStockCount = productViewModel.lowStockList.value.size
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -53,391 +51,213 @@ fun DashboardScreen(navController: NavController) {
                 lowStockCount = lowStockCount
             )
         }
-    )  {
-
+    ) {
         Scaffold(
-            bottomBar = { BottomNavBar(navController) },
             topBar = {
                 TopAppBar(
-                    title = { Text("Wholesale Manager") },
+                    title = { Text("Dashboard") },
                     navigationIcon = {
-                        IconButton(onClick = {
-                            scope.launch { drawerState.open() }
-                        }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menu")
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Menu")
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { navController.navigate("settings") }) {
+                            Icon(Icons.Filled.Settings, contentDescription = "Settings")
                         }
                     }
                 )
             }
         ) { padding ->
-
-            // 👉 KEEP YOUR EXISTING CONTENT
-            DashboardContent(navController, padding)
-        }
-    }
-}
-
-@Composable
-fun DashboardCard(
-    title: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary
-) {
-    Card(modifier = modifier) {
-        Column(Modifier.padding(12.dp)) {
-            Text(title, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.titleLarge, color = color)
-        }
-    }
-}
-
-@Composable
-fun ActionCard(
-    title: String,
-    icon: ImageVector,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = modifier
-            .height(100.dp)
-            .clickable { onClick() }
-    ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Icon(icon, contentDescription = title)
-            Text(title)
-        }
-    }
-}
-
-@Composable
-fun HighlightCard(title: String, value: String) {
-    Card(
-        modifier = Modifier
-            .width(160.dp)
-            .height(100.dp)
-    ) {
-        Column(
-            Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(title, style = MaterialTheme.typography.labelMedium)
-            Text(value, style = MaterialTheme.typography.titleLarge)
-        }
-    }
-}
-
-@Composable
-fun QuickActions(navController: NavController) {
-
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionItem("Bill", Icons.Default.Add, Modifier.weight(1f)) {
-                navController.navigate("customer_list")
-            }
-            ActionItem("Customers", Icons.Default.Person, Modifier.weight(1f)) {
-                navController.navigate("customer_list")
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionItem("Products", Icons.Default.Inventory, Modifier.weight(1f)) {
-                navController.navigate("product_list")
-            }
-            ActionItem("Expenses", Icons.Default.Money, Modifier.weight(1f)) {
-                navController.navigate("expenses")
-            }
-        }
-
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            ActionItem("Reports", Icons.Default.BarChart, Modifier.weight(1f)) {
-                navController.navigate("reports")
-            }
-            ActionItem("History", Icons.Default.List, Modifier.weight(1f)) {
-                navController.navigate("bill_history")
-            }
-        }
-    }
-}
-
-@Composable
-fun ActionItem(
-    title: String,
-    icon: ImageVector,
-    modifier: Modifier,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = modifier
-            .height(100.dp)
-            .clickable { onClick() }
-    ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Icon(icon, contentDescription = title)
-            Text(title)
-        }
-    }
-}
-
-@Composable
-fun AlertCard(text: String) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer
-        )
-    ) {
-        Text(
-            text = "⚠ $text",
-            modifier = Modifier.padding(12.dp),
-            color = MaterialTheme.colorScheme.error
-        )
-    }
-}
-
-@Composable
-fun BottomNavBar(navController: NavController) {
-
-    NavigationBar {
-        NavigationBarItem(
-            selected = true,
-            onClick = { },
-            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-            label = { Text("Home") }
-        )
-
-        NavigationBarItem(
-            selected = false,
-            onClick = { navController.navigate("reports") },
-            icon = { Icon(Icons.Default.BarChart, contentDescription = "Reports") },
-            label = { Text("Reports") }
-        )
-
-        NavigationBarItem(
-            selected = false,
-            onClick = { navController.navigate("product_list") },
-            icon = { Icon(Icons.Default.Inventory, contentDescription = "Products") },
-            label = { Text("Products") }
-        )
-    }
-}
-
-@Composable
-fun DashboardContent(navController: NavController, padding: PaddingValues) {
-
-    val billViewModel: BillViewModel = viewModel()
-    val expenseViewModel: ExpenseViewModel = viewModel()
-    val productViewModel: ProductViewModel = viewModel()
-
-    LaunchedEffect(Unit) {
-        billViewModel.fetchBills()
-    }
-
-    val totalSales = billViewModel.billList.value.sumOf { it.itemsTotal }
-    val totalExpenses = expenseViewModel.expenseList.value.sumOf { it.amount }
-    val profit = totalSales - totalExpenses
-
-    val lowStockProducts = productViewModel.productList.value
-        .filter { it.quantity <= LOW_STOCK_THRESHOLD }
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)
-            .padding(16.dp)
-    ) {
-
-        Text("Welcome back 👋", style = MaterialTheme.typography.titleMedium)
-
-        Spacer(Modifier.height(16.dp))
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            HighlightCard("Sales", "₹$totalSales")
-            HighlightCard("Expenses", "₹$totalExpenses")
-            HighlightCard("Profit", "₹$profit")
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        Text("Quick Actions", style = MaterialTheme.typography.titleMedium)
-
-        Spacer(Modifier.height(10.dp))
-
-        QuickActions(navController)
-
-        Spacer(Modifier.height(20.dp))
-
-        if (lowStockProducts.isNotEmpty()) {
-            AlertCard("${lowStockProducts.size} items low in stock")
-        }
-    }
-}
-
-@Composable
-fun AppDrawer(
-    navController: NavController,
-    onItemClick: () -> Unit,
-    lowStockCount: Int
-) {
-
-    ModalDrawerSheet {
-
-        // 🌈 HEADER
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(140.dp)
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            MaterialTheme.colorScheme.primary,
-                            MaterialTheme.colorScheme.primaryContainer
-                        )
-                    )
-                )
-                .padding(16.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.Bottom) {
-                Text(
-                    "Wholesale Manager",
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleLarge
-                )
-                Text(
-                    "Owner: Animan",
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        // 🧭 MAIN
-        DrawerItem("Dashboard", Icons.Default.Home) {
-            navController.navigate("dashboard")
-            onItemClick()
-        }
-
-        DrawerItem("Customers", Icons.Default.Person) {
-            navController.navigate("customer_list")
-            onItemClick()
-        }
-
-        DrawerItem("Products", Icons.Default.Inventory) {
-            navController.navigate("product_list")
-            onItemClick()
-        }
-
-        DrawerItemWithBadge(
-            "Low Stock",
-            Icons.Default.Warning,
-            lowStockCount
-        ) {
-            navController.navigate("product_list")
-            onItemClick()
-        }
-
-        DrawerItem("Reports", Icons.Default.BarChart) {
-            navController.navigate("reports")
-            onItemClick()
-        }
-
-        Divider(Modifier.padding(vertical = 8.dp))
-
-        Text(
-            "Settings",
-            modifier = Modifier.padding(16.dp),
-            style = MaterialTheme.typography.labelMedium
-        )
-
-        DrawerItem("Backup", Icons.Default.Cloud) {
-            navController.navigate("backup_settings")
-            onItemClick()
-        }
-
-        DrawerItem("Printer Setup", Icons.Default.Print) {
-            navController.navigate("printer_selector")
-            onItemClick()
-        }
-
-        Spacer(Modifier.weight(1f))
-
-        Divider()
-
-        DrawerItem("Logout", Icons.Default.ExitToApp) {
-            FirebaseAuth.getInstance().signOut()
-            navController.navigate("login") {
-                popUpTo("dashboard") { inclusive = true }
-            }
-            onItemClick()
-        }
-    }
-}
-
-@Composable
-fun DrawerItem(
-    title: String,
-    icon: ImageVector,
-    onClick: () -> Unit
-) {
-    NavigationDrawerItem(
-        label = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = title)
-                Spacer(Modifier.width(12.dp))
-                Text(title)
-            }
-        },
-        selected = false,
-        onClick = onClick,
-        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-    )
-}
-
-@Composable
-fun DrawerItemWithBadge(
-    title: String,
-    icon: ImageVector,
-    badgeCount: Int,
-    onClick: () -> Unit
-) {
-    NavigationDrawerItem(
-        label = {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Icon(icon, contentDescription = title)
-                Spacer(Modifier.width(12.dp))
-                Text(title)
+                item { Spacer(modifier = Modifier.height(4.dp)) }
 
-                Spacer(Modifier.weight(1f))
-
-                if (badgeCount > 0) {
-                    Badge {
-                        Text(badgeCount.toString())
+                // ── Today's summary ───────────────────────────────────
+                item {
+                    val (total, paid, balance) = billViewModel.getTodaySummary()
+                    Text("Today", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        SummaryChip("Sales", "₹${total.toInt()}", Modifier.weight(1f))
+                        SummaryChip("Paid", "₹${paid.toInt()}", Modifier.weight(1f))
+                        SummaryChip("Due", "₹${balance.toInt()}", Modifier.weight(1f))
                     }
                 }
+
+                // ── Overall summary ───────────────────────────────────
+                item {
+                    val totalSales    = billViewModel.billList.value.sumOf { it.itemsTotal }
+                    val totalExpenses = expenseViewModel.expenseList.value.sumOf { it.amount }
+                    val profit        = totalSales - totalExpenses
+                    Text("Overall", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            SummaryRow("Total sales",    "₹${totalSales.toInt()}")
+                            SummaryRow("Total expenses", "₹${totalExpenses.toInt()}")
+                            HorizontalDivider()
+                            SummaryRow(
+                                "Profit",
+                                "₹${profit.toInt()}",
+                                valueColor = if (profit >= 0)
+                                    MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+
+                // ── Low stock warning ─────────────────────────────────
+                if (lowStockCount > 0) {
+                    item {
+                        Card(
+                            onClick = { navController.navigate("product_list") },
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.errorContainer
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Icon(
+                                    Icons.Filled.Warning,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Column {
+                                    Text(
+                                        "$lowStockCount products low in stock",
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        "Tap to view",
+                                        color = MaterialTheme.colorScheme.onErrorContainer
+                                            .copy(alpha = 0.7f),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Quick actions ─────────────────────────────────────
+                item {
+                    Text("Quick actions", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        QuickActionCard(
+                            label = "New bill",
+                            icon = Icons.Filled.Receipt,
+                            onClick = { navController.navigate("customer_list") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        QuickActionCard(
+                            label = "Products",
+                            icon = Icons.Filled.Inventory,
+                            onClick = { navController.navigate("product_list") },
+                            modifier = Modifier.weight(1f)
+                        )
+                        QuickActionCard(
+                            label = "Reports",
+                            icon = Icons.Filled.BarChart,
+                            onClick = { navController.navigate("reports") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                // ── Test print ────────────────────────────────────────
+                item {
+                    var printMessage by remember { mutableStateOf("") }
+                    OutlinedButton(
+                        onClick = { printMessage = printerManager.printTestBill(context) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Filled.Print, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Test print")
+                    }
+                    if (printMessage.isNotEmpty()) {
+                        Text(
+                            printMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                item { Spacer(modifier = Modifier.height(16.dp)) }
             }
-        },
-        selected = false,
+        }
+    }
+}
+
+@Composable
+private fun SummaryChip(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(modifier = modifier, shape = RoundedCornerShape(12.dp)) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(value, style = MaterialTheme.typography.titleMedium)
+            Text(label, style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SummaryRow(
+    label: String,
+    value: String,
+    valueColor: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurface
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, color = valueColor)
+    }
+}
+
+@Composable
+private fun QuickActionCard(
+    label: String,
+    icon: ImageVector,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
         onClick = onClick,
-        modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
-    )
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(icon, contentDescription = null)
+            Text(label, style = MaterialTheme.typography.labelMedium)
+        }
+    }
 }
