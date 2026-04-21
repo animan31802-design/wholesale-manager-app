@@ -10,7 +10,7 @@ class DatabaseHelper(context: Context) :
 
     companion object {
         const val DATABASE_NAME    = "wholesale_manager.db"
-        const val DATABASE_VERSION = 3          // 2 → 3
+        const val DATABASE_VERSION = 4          // 3 → 4
 
         const val TABLE_CUSTOMERS    = "customers"
         const val TABLE_PRODUCTS     = "products"
@@ -25,6 +25,8 @@ class DatabaseHelper(context: Context) :
         const val COL_CUSTOMER_NAME           = "name"
         const val COL_CUSTOMER_PHONE          = "phone"
         const val COL_CUSTOMER_ADDRESS        = "address"
+        const val COL_CUSTOMER_LATITUDE       = "latitude"
+        const val COL_CUSTOMER_LONGITUDE      = "longitude"
         const val COL_CUSTOMER_TOTAL_PURCHASE = "total_purchase"
         const val COL_CUSTOMER_TOTAL_PAID     = "total_paid"
         const val COL_CUSTOMER_BALANCE        = "balance"
@@ -101,6 +103,10 @@ class DatabaseHelper(context: Context) :
             runCatching { db.execSQL("ALTER TABLE $TABLE_BILLS ADD COLUMN $COL_BILL_IS_REFUNDED INTEGER DEFAULT 0") }
             runCatching { db.execSQL("ALTER TABLE $TABLE_BILLS ADD COLUMN $COL_BILL_REFUNDED_AT INTEGER DEFAULT 0") }
         }
+        if (oldVersion < 4) {
+            runCatching { db.execSQL("ALTER TABLE $TABLE_CUSTOMERS ADD COLUMN $COL_CUSTOMER_LATITUDE REAL DEFAULT NULL") }
+            runCatching { db.execSQL("ALTER TABLE $TABLE_CUSTOMERS ADD COLUMN $COL_CUSTOMER_LONGITUDE REAL DEFAULT NULL") }
+        }
     }
 
     private fun createAllTables(db: SQLiteDatabase) {
@@ -109,6 +115,8 @@ class DatabaseHelper(context: Context) :
             $COL_CUSTOMER_NAME           TEXT NOT NULL,
             $COL_CUSTOMER_PHONE          TEXT,
             $COL_CUSTOMER_ADDRESS        TEXT,
+            $COL_CUSTOMER_LATITUDE       REAL,
+            $COL_CUSTOMER_LONGITUDE      REAL,
             $COL_CUSTOMER_TOTAL_PURCHASE REAL DEFAULT 0,
             $COL_CUSTOMER_TOTAL_PAID     REAL DEFAULT 0,
             $COL_CUSTOMER_BALANCE        REAL DEFAULT 0)""")
@@ -200,6 +208,8 @@ class DatabaseHelper(context: Context) :
         val cv = ContentValues().apply {
             put(COL_CUSTOMER_NAME, c.name); put(COL_CUSTOMER_PHONE, c.phone)
             put(COL_CUSTOMER_ADDRESS, c.address)
+            put(COL_CUSTOMER_LATITUDE, c.latitude)
+            put(COL_CUSTOMER_LONGITUDE, c.longitude)
             put(COL_CUSTOMER_TOTAL_PURCHASE, c.totalPurchase)
             put(COL_CUSTOMER_TOTAL_PAID, c.totalPaid)
             put(COL_CUSTOMER_BALANCE, c.balance)
@@ -477,13 +487,17 @@ class DatabaseHelper(context: Context) :
     }
 
     private fun android.database.Cursor.toCustomer() = Customer(
-        id = getString(getColumnIndexOrThrow(COL_CUSTOMER_ID)),
-        name = getString(getColumnIndexOrThrow(COL_CUSTOMER_NAME)),
-        phone = getString(getColumnIndexOrThrow(COL_CUSTOMER_PHONE)) ?: "",
-        address = getString(getColumnIndexOrThrow(COL_CUSTOMER_ADDRESS)) ?: "",
+        id            = getString(getColumnIndexOrThrow(COL_CUSTOMER_ID)),
+        name          = getString(getColumnIndexOrThrow(COL_CUSTOMER_NAME)),
+        phone         = getString(getColumnIndexOrThrow(COL_CUSTOMER_PHONE)) ?: "",
+        address       = getString(getColumnIndexOrThrow(COL_CUSTOMER_ADDRESS)) ?: "",
+        latitude      = if (isNull(getColumnIndexOrThrow(COL_CUSTOMER_LATITUDE))) null
+        else getDouble(getColumnIndexOrThrow(COL_CUSTOMER_LATITUDE)),
+        longitude     = if (isNull(getColumnIndexOrThrow(COL_CUSTOMER_LONGITUDE))) null
+        else getDouble(getColumnIndexOrThrow(COL_CUSTOMER_LONGITUDE)),
         totalPurchase = getDouble(getColumnIndexOrThrow(COL_CUSTOMER_TOTAL_PURCHASE)),
-        totalPaid = getDouble(getColumnIndexOrThrow(COL_CUSTOMER_TOTAL_PAID)),
-        balance = getDouble(getColumnIndexOrThrow(COL_CUSTOMER_BALANCE))
+        totalPaid     = getDouble(getColumnIndexOrThrow(COL_CUSTOMER_TOTAL_PAID)),
+        balance       = getDouble(getColumnIndexOrThrow(COL_CUSTOMER_BALANCE))
     )
 
     private fun android.database.Cursor.toProduct() = Product(
@@ -509,6 +523,8 @@ class DatabaseHelper(context: Context) :
     private fun Customer.toCV() = ContentValues().apply {
         put(COL_CUSTOMER_ID, id); put(COL_CUSTOMER_NAME, name)
         put(COL_CUSTOMER_PHONE, phone); put(COL_CUSTOMER_ADDRESS, address)
+        if (latitude != null) put(COL_CUSTOMER_LATITUDE, latitude)
+        if (longitude != null) put(COL_CUSTOMER_LONGITUDE, longitude)
         put(COL_CUSTOMER_TOTAL_PURCHASE, totalPurchase)
         put(COL_CUSTOMER_TOTAL_PAID, totalPaid); put(COL_CUSTOMER_BALANCE, balance)
     }

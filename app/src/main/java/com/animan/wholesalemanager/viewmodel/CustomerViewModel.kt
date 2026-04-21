@@ -14,10 +14,10 @@ class CustomerViewModel(app: Application) : AndroidViewModel(app) {
     var errorMessage = mutableStateOf<String?>(null)
     var customerList = mutableStateOf<List<Customer>>(emptyList())
 
-    fun addCustomer(name: String, phone: String, address: String = "", onSuccess: () -> Unit) {
+    fun addCustomer(name: String, phone: String, address: String = "", latitude: Double? = null, longitude: Double? = null, onSuccess: () -> Unit) {
         if (name.isBlank()) { errorMessage.value = "Name cannot be empty"; return }
         isLoading.value = true
-        repository.addCustomer(Customer(name = name.trim(), phone = phone.trim(), address = address.trim()),
+        repository.addCustomer(Customer(name = name.trim(), phone = phone.trim(), address = address.trim(), latitude = latitude, longitude=longitude),
             onSuccess = { isLoading.value = false; onSuccess() },
             onError   = { isLoading.value = false; errorMessage.value = it })
     }

@@ -12,12 +12,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.animan.wholesalemanager.ui.screens.*
 import com.animan.wholesalemanager.ui.theme.WholesaleManagerTheme
+import com.animan.wholesalemanager.utils.AppLanguage
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestBluetoothPermission()
+
+        // Load saved language BEFORE setContent so first frame is correct
+        AppLanguage.load(this)
 
         setContent {
             WholesaleManagerTheme {
@@ -56,34 +60,26 @@ class MainActivity : ComponentActivity() {
                     }
                     composable("customer_list")  { CustomerListScreen(navController) }
                     composable("billing/{customerId}") { backStackEntry ->
-                        BillingWrapperScreen(
-                            backStackEntry.arguments?.getString("customerId") ?: "",
-                            navController
-                        )
+                        BillingWrapperScreen(backStackEntry.arguments?.getString("customerId") ?: "", navController)
                     }
                     composable("payment/{customerId}") { backStackEntry ->
-                        PaymentEntryScreen(
-                            backStackEntry.arguments?.getString("customerId") ?: "",
-                            navController
-                        )
+                        PaymentEntryScreen(backStackEntry.arguments?.getString("customerId") ?: "", navController)
                     }
                     composable("product_list")   { ProductListScreen(navController) }
                     composable("add_product")    { AddProductScreen(navController) }
                     composable("edit_product/{productId}") { backStackEntry ->
                         AddProductScreen(navController, backStackEntry.arguments?.getString("productId"))
                     }
-                    composable("stock_consumption") { StockConsumptionScreen(navController) }
                     composable("expenses")       { ExpenseScreen() }
                     composable("reports")        { ReportScreen() }
                     composable("bill_history")   { BillHistoryScreen(navController) }
                     composable("ledger/{customerId}") { backStackEntry ->
-                        LedgerWrapperScreen(
-                            backStackEntry.arguments?.getString("customerId") ?: "",
-                            navController
-                        )
+                        LedgerWrapperScreen(backStackEntry.arguments?.getString("customerId") ?: "", navController)
                     }
                     composable("printer_selector") { PrinterSelectorScreen(navController) }
                     composable("settings")         { SettingsScreen(navController) }
+                    composable("stock_consumption"){ StockConsumptionScreen(navController) }
+                    composable("location_picker")  { LocationPickerScreen(navController) }
                 }
             }
         }
@@ -91,11 +87,9 @@ class MainActivity : ComponentActivity() {
 
     private fun requestBluetoothPermission() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            ActivityCompat.requestPermissions(
-                this, arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1
-            )
+            != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this,
+                arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 1)
         }
     }
 }

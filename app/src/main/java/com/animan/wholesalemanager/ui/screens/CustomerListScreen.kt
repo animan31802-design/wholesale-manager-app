@@ -131,6 +131,19 @@ fun CustomerListScreen(navController: NavController) {
                                             )
                                         }
                                     }
+
+                                    if (customer.latitude != null && customer.longitude != null) {
+                                        IconButton(
+                                            onClick = {
+                                                val uri = Uri.parse("google.navigation:q=${customer.latitude},${customer.longitude}")
+                                                val intent = Intent(Intent.ACTION_VIEW, uri)
+                                                intent.setPackage("com.google.android.apps.maps")
+                                                context.startActivity(intent)
+                                            }
+                                        ) {
+                                            Icon(Icons.Filled.LocationOn, contentDescription = "Navigate")
+                                        }
+                                    }
                                 }
 
                                 Spacer(Modifier.height(4.dp))

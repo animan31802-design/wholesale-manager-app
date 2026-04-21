@@ -30,6 +30,7 @@ import com.animan.wholesalemanager.printer.PrinterManager
 import com.animan.wholesalemanager.ui.components.UpiPaymentDialog
 import com.animan.wholesalemanager.utils.PdfGenerator
 import com.animan.wholesalemanager.utils.PdfGenerator.sharePdf
+import com.animan.wholesalemanager.utils.PriceUtils.formatPrice
 import com.animan.wholesalemanager.utils.WhatsAppShare
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
@@ -253,7 +254,7 @@ private fun ProductBillingRow(product: Product, qtyInCart: Int, onAdd: () -> Uni
         Column(modifier = Modifier.weight(1f)) {
             Text(product.name, style = MaterialTheme.typography.titleSmall)
             val gstText = if (product.gstPercent > 0) "  GST ${product.gstPercent.toInt()}%" else ""
-            Text("₹${product.sellingPrice}  |  ${product.unit}  |  Stock: ${product.quantity}$gstText",
+            Text("₹${product.sellingPrice.formatPrice()}  |  ${product.unit}  |  Stock: ${product.quantity}$gstText",
                 style = MaterialTheme.typography.bodySmall,
                 color = if (product.quantity <= product.minStockLevel)
                     MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -330,7 +331,7 @@ private fun CartView(
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(item.name, style = MaterialTheme.typography.titleSmall)
-                        Text("₹${item.price} × ${item.quantity} ${item.unit} = ₹${(item.price * item.quantity).toInt()}",
+                        Text("₹${item.price.formatPrice()} × ${item.quantity} ${item.unit} = ₹${"%.2f".format(item.price * item.quantity)}",
                             style = MaterialTheme.typography.bodySmall)
                         if (item.gstPercent > 0)
                             Text("GST ${item.gstPercent.toInt()}% = ₹${item.gstAmount.toInt()}",
@@ -354,7 +355,7 @@ private fun CartView(
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("Items total"); Text("₹${itemsTotal.toInt()}") }
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("Items total"); Text("₹${"%.2f".format(itemsTotal)}") }
                     if (gstTotal > 0) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                             Text("GST", color = MaterialTheme.colorScheme.onSurfaceVariant)

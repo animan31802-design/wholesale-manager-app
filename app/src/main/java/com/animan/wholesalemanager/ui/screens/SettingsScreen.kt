@@ -15,7 +15,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.animan.wholesalemanager.utils.AppLanguage
 import com.animan.wholesalemanager.utils.AppPreferences
+import com.animan.wholesalemanager.utils.Language
 import com.animan.wholesalemanager.utils.UpiQrGenerator
 import com.animan.wholesalemanager.viewmodel.BackupViewModel
 
@@ -23,6 +25,7 @@ import com.animan.wholesalemanager.viewmodel.BackupViewModel
 @Composable
 fun SettingsScreen(navController: NavController) {
     val context = LocalContext.current
+    val S        = AppLanguage.strings
     val backupViewModel: BackupViewModel = viewModel()
 
     var shopName        by remember { mutableStateOf(AppPreferences.getShopName(context)) }
@@ -117,6 +120,42 @@ fun SettingsScreen(navController: NavController) {
                         contentDescription = "UPI QR preview",
                         modifier = Modifier.size(160.dp))
                 }
+            }
+
+            HorizontalDivider()
+
+            // ── Language ──────────────────────────────────────────────
+            SectionHeader(Icons.Filled.Language, S.language)
+
+            Text(
+                "Current: ${if (AppLanguage.current == Language.TAMIL) "தமிழ்" else "English"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = {
+                        AppLanguage.setLanguage(context, Language.ENGLISH)
+                        // Restart activity to re-render all composables with new strings
+                        (context as? android.app.Activity)?.recreate()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = if (AppLanguage.current == Language.ENGLISH)
+                        ButtonDefaults.buttonColors()
+                    else ButtonDefaults.outlinedButtonColors()
+                ) { Text("English") }
+
+                Button(
+                    onClick = {
+                        AppLanguage.setLanguage(context, Language.TAMIL)
+                        (context as? android.app.Activity)?.recreate()
+                    },
+                    modifier = Modifier.weight(1f),
+                    colors = if (AppLanguage.current == Language.TAMIL)
+                        ButtonDefaults.buttonColors()
+                    else ButtonDefaults.outlinedButtonColors()
+                ) { Text("தமிழ்") }
             }
 
             HorizontalDivider()
