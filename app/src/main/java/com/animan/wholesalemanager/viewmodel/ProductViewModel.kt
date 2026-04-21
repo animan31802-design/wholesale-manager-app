@@ -10,12 +10,12 @@ class ProductViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = ProductRepository(app.applicationContext)
 
-    var productList        = mutableStateOf<List<Product>>(emptyList())
-    var categoryList       = mutableStateOf<List<String>>(emptyList())
-    var frequentList       = mutableStateOf<List<Product>>(emptyList())
-    var lowStockList       = mutableStateOf<List<Product>>(emptyList())
-    var isLoading          = mutableStateOf(false)
-    var errorMessage       = mutableStateOf<String?>(null)
+    var productList  = mutableStateOf<List<Product>>(emptyList())
+    var categoryList = mutableStateOf<List<String>>(emptyList())
+    var frequentList = mutableStateOf<List<Product>>(emptyList())
+    var lowStockList = mutableStateOf<List<Product>>(emptyList())
+    var isLoading    = mutableStateOf(false)
+    var errorMessage = mutableStateOf<String?>(null)
 
     fun fetchProducts() {
         isLoading.value = true
@@ -25,32 +25,16 @@ class ProductViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun fetchCategories() {
-        categoryList.value = repository.getDistinctCategories()
-    }
+    fun fetchCategories()      { categoryList.value = repository.getDistinctCategories() }
+    fun fetchFrequentProducts(){ frequentList.value = repository.getFrequentlySoldProducts(10) }
+    fun fetchLowStockProducts(){ lowStockList.value = repository.getLowStockProducts() }
 
-    fun fetchFrequentProducts() {
-        frequentList.value = repository.getFrequentlySoldProducts(10)
-    }
-
-    fun fetchLowStockProducts() {
-        lowStockList.value = repository.getLowStockProducts()
-    }
-
-    // Called on every keystroke in billing search (results go straight to productList)
-    fun searchProducts(query: String) {
-        productList.value = repository.searchProducts(query)
-    }
-
+    fun searchProducts(query: String)     { productList.value = repository.searchProducts(query) }
     fun filterByCategory(category: String) {
-        productList.value = if (category == "All")
-            repository.searchProducts("")
-        else
-            repository.getProductsByCategory(category)
+        productList.value = if (category == "All") repository.searchProducts("")
+        else repository.getProductsByCategory(category)
     }
-
-    fun getProductByBarcode(barcode: String): Product? =
-        repository.getProductByBarcode(barcode)
+    fun getProductByBarcode(barcode: String): Product? = repository.getProductByBarcode(barcode)
 
     fun addProduct(product: Product, onSuccess: () -> Unit) {
         if (product.name.isBlank()) { errorMessage.value = "Name cannot be empty"; return }
@@ -79,10 +63,18 @@ class ProductViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun restockProduct(productId: String, qty: Int, onSuccess: () -> Unit) {
-        if (qty <= 0) { errorMessage.value = "Quantity must be > 0"; return }
-        repository.restockProduct(productId, qty,
-            onSuccess = { fetchProducts(); onSuccess() },
-            onError   = { errorMessage.value = it }
-        )
+        if (qty == 0) return
+        if (qty > 0) {
+            repository.restockProduct(productId, qty,
+                onSuccess = { fetchProducts(); onSuccess() },
+                onError   = { errorMessage.value = it }
+            )
+        } else {
+            // Negative qty = consumption / write-off
+            repository.consumeStock(productId, -qty,
+                onSuccess = { fetchProducts(); onSuccess() },
+                onError   = { errorMessage.value = it }
+            )
+        }
     }
 }

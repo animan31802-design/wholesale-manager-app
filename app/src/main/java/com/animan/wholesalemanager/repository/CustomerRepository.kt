@@ -3,6 +3,7 @@ package com.animan.wholesalemanager.repository
 import android.content.Context
 import com.animan.wholesalemanager.data.local.*
 import java.util.UUID
+import com.animan.wholesalemanager.utils.MoneyUtils.roundMoney
 
 class CustomerRepository(private val context: Context) {
 
@@ -59,9 +60,9 @@ class CustomerRepository(private val context: Context) {
         }
 
         db.updateCustomer(customer.copy(
-            totalPurchase = customer.totalPurchase + bill.grandTotal,
-            totalPaid     = customer.totalPaid + bill.paidAmount,
-            balance       = customer.balance + bill.grandTotal - bill.paidAmount
+            totalPurchase = (customer.totalPurchase + bill.grandTotal).roundMoney(),
+            totalPaid     = (customer.totalPaid + bill.paidAmount).roundMoney(),
+            balance       = (customer.balance + bill.grandTotal - bill.paidAmount).roundMoney()
         ))
 
         onSuccess(billId)
@@ -94,9 +95,9 @@ class CustomerRepository(private val context: Context) {
         // Reverse customer balance
         // If they had paid, give back the paid amount as a credit reduction
         db.updateCustomer(customer.copy(
-            totalPurchase = (customer.totalPurchase - bill.grandTotal).coerceAtLeast(0.0),
-            totalPaid     = (customer.totalPaid - bill.paidAmount).coerceAtLeast(0.0),
-            balance       = (customer.balance - bill.balance).coerceAtLeast(0.0)
+            totalPurchase = (customer.totalPurchase - bill.grandTotal).coerceAtLeast(0.0).roundMoney(),
+            totalPaid     = (customer.totalPaid - bill.paidAmount).coerceAtLeast(0.0).roundMoney(),
+            balance       = (customer.balance - bill.balance).coerceAtLeast(0.0).roundMoney()
         ))
 
         onSuccess()
@@ -121,8 +122,8 @@ class CustomerRepository(private val context: Context) {
             ))) { onError("Failed to record payment"); return }
 
         db.updateCustomer(customer.copy(
-            totalPaid = customer.totalPaid + amount,
-            balance   = customer.balance - amount
+            totalPaid = (customer.totalPaid + amount).roundMoney(),
+            balance   = (customer.balance - amount).roundMoney()
         ))
         onSuccess()
     }

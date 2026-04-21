@@ -41,6 +41,7 @@ fun AppDrawer(
         DrawerItem("Customers",     Icons.Filled.People,       "customer_list"),
         DrawerItem("Products",      Icons.Filled.Inventory,    "product_list",
             badgeCount = lowStockCount),
+        DrawerItem("Stock consumption",   Icons.Filled.RemoveShoppingCart, "stock_consumption"),
         DrawerItem("Expenses",      Icons.Filled.MoneyOff,     "expenses"),
         DrawerItem("Reports",       Icons.Filled.BarChart,     "reports"),
         DrawerItem("Settings",      Icons.Filled.Settings,     "settings"),

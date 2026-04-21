@@ -27,13 +27,13 @@ import java.util.*
 fun BillHistoryScreen(navController: NavController) {
     val billViewModel     = viewModel<BillViewModel>()
     val customerViewModel = viewModel<CustomerViewModel>()
-    val printerManager = remember { PrinterManager() }
-    val context = LocalContext.current
-    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
+    val printerManager    = remember { PrinterManager() }
+    val context           = LocalContext.current
+    val dateFormat        = remember { SimpleDateFormat("dd MMM yyyy, hh:mm a", Locale.getDefault()) }
 
-    var searchQuery   by remember { mutableStateOf("") }
-    var printMessage  by remember { mutableStateOf("") }
-    var refundTarget  by remember { mutableStateOf<Bill?>(null) }
+    var searchQuery  by remember { mutableStateOf("") }
+    var printMessage by remember { mutableStateOf("") }
+    var refundTarget by remember { mutableStateOf<Bill?>(null) }
 
     LaunchedEffect(Unit) {
         billViewModel.fetchBills()
@@ -104,21 +104,28 @@ fun BillHistoryScreen(navController: NavController) {
 
                                 Spacer(Modifier.height(4.dp))
 
-                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text("Total: ₹${bill.grandTotal.toInt()}", style = MaterialTheme.typography.bodySmall)
+                                Row(Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    Text("Total: ₹${bill.grandTotal.toInt()}",
+                                        style = MaterialTheme.typography.bodySmall)
                                     if (bill.gstTotal > 0)
-                                        Text("GST: ₹${bill.gstTotal.toInt()}", style = MaterialTheme.typography.bodySmall,
+                                        Text("GST: ₹${bill.gstTotal.toInt()}",
+                                            style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("Paid: ₹${bill.paidAmount.toInt()}", style = MaterialTheme.typography.bodySmall,
+                                    Text("Paid: ₹${bill.paidAmount.toInt()}",
+                                        style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary)
                                     if (bill.balance > 0)
-                                        Text("Due: ₹${bill.balance.toInt()}", style = MaterialTheme.typography.bodySmall,
+                                        Text("Due: ₹${bill.balance.toInt()}",
+                                            style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.error)
                                 }
 
                                 if (bill.items.isNotEmpty()) {
-                                    val preview = bill.items.take(2).joinToString(", ") { "${it.name} ×${it.quantity}" }
-                                    val more = if (bill.items.size > 2) " +${bill.items.size - 2} more" else ""
+                                    val preview = bill.items.take(2)
+                                        .joinToString(", ") { "${it.name} ×${it.quantity}" }
+                                    val more = if (bill.items.size > 2)
+                                        " +${bill.items.size - 2} more" else ""
                                     Text(preview + more, style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
@@ -129,13 +136,15 @@ fun BillHistoryScreen(navController: NavController) {
                                     if (!bill.isRefunded) {
                                         OutlinedButton(onClick = {
                                             printMessage = printerManager.printBill(
-                                                context, Customer(bill.customerId, bill.customerName),
+                                                context,
+                                                Customer(bill.customerId, bill.customerName),
                                                 bill.items, bill.itemsTotal, bill.paidAmount,
                                                 bill.grandTotal + bill.balance)
                                         }, modifier = Modifier.height(32.dp),
                                             contentPadding = PaddingValues(horizontal = 12.dp)) {
                                             Icon(Icons.Filled.Print, null, Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp)); Text("Reprint")
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Reprint")
                                         }
 
                                         if (bill.balance > 0) {
@@ -159,18 +168,13 @@ fun BillHistoryScreen(navController: NavController) {
                                             onClick = {
                                                 WhatsAppShare.shareTextSummary(
                                                     context,
-                                                    Customer(bill.customerId, bill.customerName, phone = ""),
-                                                    bill.items,
-                                                    bill.grandTotal,
-                                                    bill.paidAmount,
-                                                    bill.balance
-                                                )
+                                                    Customer(bill.customerId, bill.customerName),
+                                                    bill.items, bill.grandTotal,
+                                                    bill.paidAmount, bill.balance)
                                             },
                                             modifier = Modifier.height(32.dp),
                                             contentPadding = PaddingValues(horizontal = 12.dp)
-                                        ) {
-                                            Text("WhatsApp")
-                                        }
+                                        ) { Text("WhatsApp") }
                                     }
                                 }
                             }
@@ -181,7 +185,6 @@ fun BillHistoryScreen(navController: NavController) {
         }
     }
 
-    // Refund confirm dialog
     refundTarget?.let { bill ->
         AlertDialog(
             onDismissRequest = { refundTarget = null },
@@ -199,10 +202,15 @@ fun BillHistoryScreen(navController: NavController) {
                         val customer = customerViewModel.customerList.value
                             .find { it.id == bill.customerId }
                         customer?.let {
-                            customerViewModel.refundBill(bill, it) { refundTarget = null }
+                            customerViewModel.refundBill(bill, it) {
+                                refundTarget = null
+                                // FIX 1: refresh bill list immediately so UI updates in place
+                                billViewModel.fetchBills()
+                            }
                         } ?: run { refundTarget = null }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error)
                 ) { Text("Yes, refund") }
             },
             dismissButton = {

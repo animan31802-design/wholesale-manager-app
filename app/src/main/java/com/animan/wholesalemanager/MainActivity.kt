@@ -72,6 +72,7 @@ class MainActivity : ComponentActivity() {
                     composable("edit_product/{productId}") { backStackEntry ->
                         AddProductScreen(navController, backStackEntry.arguments?.getString("productId"))
                     }
+                    composable("stock_consumption") { StockConsumptionScreen(navController) }
                     composable("expenses")       { ExpenseScreen() }
                     composable("reports")        { ReportScreen() }
                     composable("bill_history")   { BillHistoryScreen(navController) }
