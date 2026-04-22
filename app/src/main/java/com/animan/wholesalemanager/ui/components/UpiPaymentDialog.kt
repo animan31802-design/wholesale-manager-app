@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.animan.wholesalemanager.utils.AppPreferences
+import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.utils.UpiQrGenerator
 
 @Composable
@@ -56,7 +57,7 @@ fun UpiPaymentDialog(
                 Text("Pay via UPI", style = MaterialTheme.typography.titleLarge)
 
                 Text(
-                    "Amount: ₹${amount.toInt()}",
+                    "Amount: ${amount.toRupees()}",
                     style = MaterialTheme.typography.headlineSmall,
                     color = MaterialTheme.colorScheme.primary
                 )

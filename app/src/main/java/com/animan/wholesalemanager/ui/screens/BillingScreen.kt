@@ -399,7 +399,7 @@ private fun CartView(
             // UPI QR Pay button
             OutlinedButton(
                 onClick = {
-                    upiAmount = totalOwed - (paidAmount.toDoubleOrNull() ?: 0.0)
+                    upiAmount = totalOwed.round2dp() - (paidAmount.toDoubleOrNull() ?: 0.0)
                     if (upiAmount > 0) showUpiDialog = true
                 },
                 modifier = Modifier.fillMaxWidth()
@@ -428,7 +428,7 @@ private fun CartView(
             billNote = "Invoice",
             onMarkPaid = {
                 // Set paid amount to full remaining balance
-                onPaidAmountChange(upiAmount.toInt().toString())
+                onPaidAmountChange(upiAmount.formatPrice())
                 showUpiDialog = false
             },
             onDismiss = { showUpiDialog = false }
