@@ -31,6 +31,8 @@ import com.animan.wholesalemanager.ui.components.UpiPaymentDialog
 import com.animan.wholesalemanager.utils.PdfGenerator
 import com.animan.wholesalemanager.utils.PdfGenerator.sharePdf
 import com.animan.wholesalemanager.utils.PriceUtils.formatPrice
+import com.animan.wholesalemanager.utils.PriceUtils.round2dp
+import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.utils.WhatsAppShare
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
@@ -103,7 +105,7 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
                     Column {
                         Text(customer.name, style = MaterialTheme.typography.titleMedium)
                         if (customer.balance > 0)
-                            Text("Prev. balance: ₹${customer.balance.toInt()}",
+                            Text("Prev. balance: ${customer.balance.toRupees()}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error)
                     }
@@ -111,7 +113,7 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
                         if (cartQty.isNotEmpty()) Badge { Text(cartQty.values.sum().toString()) }
                     }) {
                         Button(onClick = { showCart = !showCart }) {
-                            Text(if (showCart) "Products" else "Cart ₹${grandTotal.toInt()}")
+                            Text(if (showCart) "Products" else "Cart ${grandTotal.toRupees()}")
                         }
                     }
                 }
@@ -282,7 +284,7 @@ private fun FrequentProductChip(product: Product, qtyInCart: Int, onAdd: () -> U
     ElevatedCard(onClick = onAdd, enabled = product.quantity > qtyInCart, modifier = Modifier.width(110.dp)) {
         Column(modifier = Modifier.padding(8.dp)) {
             Text(product.name.take(14), style = MaterialTheme.typography.labelMedium, maxLines = 1)
-            Text("₹${product.sellingPrice.toInt()}", style = MaterialTheme.typography.bodySmall)
+            Text(product.sellingPrice.toRupees(), style = MaterialTheme.typography.bodySmall)
             if (qtyInCart > 0) Text("In cart: $qtyInCart",
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
         }
@@ -331,10 +333,10 @@ private fun CartView(
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(item.name, style = MaterialTheme.typography.titleSmall)
-                        Text("₹${item.price.formatPrice()} × ${item.quantity} ${item.unit} = ₹${"%.2f".format(item.price * item.quantity)}",
+                        Text("₹${item.price.formatPrice()} × ${item.quantity} ${item.unit} = ₹${(item.price * item.quantity).formatPrice()}",
                             style = MaterialTheme.typography.bodySmall)
                         if (item.gstPercent > 0)
-                            Text("GST ${item.gstPercent.toInt()}% = ₹${item.gstAmount.toInt()}",
+                            Text("GST ${item.gstPercent}% = ₹${item.gstAmount.formatPrice()}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -355,23 +357,23 @@ private fun CartView(
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("Items total"); Text("₹${"%.2f".format(itemsTotal)}") }
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) { Text("Items total"); Text(itemsTotal.toRupees()) }
                     if (gstTotal > 0) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                             Text("GST", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("₹${gstTotal.toInt()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(gstTotal.toRupees(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     if (customer.balance > 0) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                             Text("Previous balance", color = MaterialTheme.colorScheme.error)
-                            Text("₹${customer.balance.toInt()}", color = MaterialTheme.colorScheme.error)
+                            Text(customer.balance.toRupees(), color = MaterialTheme.colorScheme.error)
                         }
                     }
                     HorizontalDivider()
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                         Text("Total payable", style = MaterialTheme.typography.titleMedium)
-                        Text("₹${totalOwed.toInt()}", style = MaterialTheme.typography.titleMedium)
+                        Text(totalOwed.toRupees(), style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
@@ -384,12 +386,12 @@ private fun CartView(
         }
 
         item {
-            val fa = totalOwed.toInt()
+            val fa = totalOwed.round2dp()
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(500, 1000, 2000).filter { it <= fa }.forEach { amt ->
                     OutlinedButton(onClick = { onPaidAmountChange(amt.toString()) }) { Text("₹$amt") }
                 }
-                OutlinedButton(onClick = { onPaidAmountChange(fa.toString()) }) { Text("Full ₹$fa") }
+                OutlinedButton(onClick = { onPaidAmountChange(fa.toString()) }) { Text("Full ₹${fa.formatPrice()}") }
             }
         }
 

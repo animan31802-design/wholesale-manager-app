@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.animan.wholesalemanager.data.local.Product
+import com.animan.wholesalemanager.utils.PriceUtils.formatPrice
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,7 +102,7 @@ fun ProductListScreen(navController: NavController) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(product.name, style = MaterialTheme.typography.titleSmall)
                                     Text(
-                                        "Sell: ₹${product.sellingPrice}  |  Cost: ₹${product.costPrice}",
+                                        "Sell: ₹${product.sellingPrice.formatPrice()}  |  Cost: ₹${product.costPrice.formatPrice()}",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Text(

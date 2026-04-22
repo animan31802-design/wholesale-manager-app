@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.animan.wholesalemanager.utils.PriceUtils.round2dp
+import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 
 // FIX 4: Central money formatting — rounds Double to 2dp and removes noise
@@ -150,9 +152,9 @@ fun CustomerListScreen(navController: NavController) {
 
                                 // FIX 4: balance displayed as rounded integer — no floating noise
                                 Text(
-                                    "Balance: ${customer.balance.fmtInt()}",
+                                    "Balance: ${customer.balance.toRupees()}",
                                     style = MaterialTheme.typography.titleSmall,
-                                    color = if (customer.balance > 0.005)
+                                    color = if (customer.balance.round2dp() > 0.005)
                                         MaterialTheme.colorScheme.error
                                     else MaterialTheme.colorScheme.primary
                                 )
@@ -168,7 +170,7 @@ fun CustomerListScreen(navController: NavController) {
                                     }
                                     OutlinedButton(
                                         onClick = { navController.navigate("payment/${customer.id}") },
-                                        enabled = customer.balance > 0.005
+                                        enabled = customer.balance.round2dp() > 0.005
                                     ) {
                                         Text("Pay")
                                     }

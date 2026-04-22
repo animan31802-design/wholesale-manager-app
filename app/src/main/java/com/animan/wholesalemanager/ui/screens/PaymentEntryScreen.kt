@@ -9,6 +9,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.animan.wholesalemanager.utils.PriceUtils.formatPrice
+import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -60,14 +62,14 @@ fun PaymentEntryScreen(
                     Text("Phone: ${customer.phone}")
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "Outstanding balance: ₹${customer.balance}",
+                        "Outstanding balance: ${customer.balance.toRupees()}",
                         style = MaterialTheme.typography.titleMedium,
                         color = if (customer.balance > 0)
                             MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.primary
                     )
-                    Text("Total purchase: ₹${customer.totalPurchase}")
-                    Text("Total paid: ₹${customer.totalPaid}")
+                    Text("Total purchase: ${customer.totalPurchase.toRupees()}")
+                    Text("Total paid: ${customer.totalPaid.toRupees()}")
                 }
             }
 
@@ -115,8 +117,8 @@ fun PaymentEntryScreen(
                             }
                         }
                     }
-                    OutlinedButton(onClick = { amount = customer.balance.toInt().toString() }) {
-                        Text("Full ₹${customer.balance.toInt()}")
+                    OutlinedButton(onClick = { amount = customer.balance.formatPrice() }) {
+                        Text("Full ${customer.balance.toRupees()}")
                     }
                 }
                 Spacer(modifier = Modifier.height(16.dp))

@@ -10,11 +10,10 @@ class DatabaseHelper(context: Context) :
 
     companion object {
         const val DATABASE_NAME    = "wholesale_manager.db"
-        const val DATABASE_VERSION = 4          // 3 → 4
+        const val DATABASE_VERSION = 5  // bumped: removes FTS table
 
         const val TABLE_CUSTOMERS    = "customers"
         const val TABLE_PRODUCTS     = "products"
-        const val TABLE_PRODUCTS_FTS = "products_fts"
         const val TABLE_BILLS        = "bills"
         const val TABLE_BILL_ITEMS   = "bill_items"
         const val TABLE_LEDGER       = "ledger"
@@ -91,13 +90,9 @@ class DatabaseHelper(context: Context) :
     override fun onCreate(db: SQLiteDatabase) = createAllTables(db)
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Safe incremental migration
         if (oldVersion < 3) {
-            // Add GST column to products
             runCatching { db.execSQL("ALTER TABLE $TABLE_PRODUCTS ADD COLUMN $COL_PRODUCT_GST REAL DEFAULT 0") }
-            // Add GST column to bill_items
             runCatching { db.execSQL("ALTER TABLE $TABLE_BILL_ITEMS ADD COLUMN $COL_BI_GST REAL DEFAULT 0") }
-            // Add GST total, grand total, refund columns to bills
             runCatching { db.execSQL("ALTER TABLE $TABLE_BILLS ADD COLUMN $COL_BILL_GST_TOTAL REAL DEFAULT 0") }
             runCatching { db.execSQL("ALTER TABLE $TABLE_BILLS ADD COLUMN $COL_BILL_GRAND_TOTAL REAL DEFAULT 0") }
             runCatching { db.execSQL("ALTER TABLE $TABLE_BILLS ADD COLUMN $COL_BILL_IS_REFUNDED INTEGER DEFAULT 0") }
@@ -106,6 +101,10 @@ class DatabaseHelper(context: Context) :
         if (oldVersion < 4) {
             runCatching { db.execSQL("ALTER TABLE $TABLE_CUSTOMERS ADD COLUMN $COL_CUSTOMER_LATITUDE REAL DEFAULT NULL") }
             runCatching { db.execSQL("ALTER TABLE $TABLE_CUSTOMERS ADD COLUMN $COL_CUSTOMER_LONGITUDE REAL DEFAULT NULL") }
+        }
+        if (oldVersion < 5) {
+            // Drop the FTS table — it was causing all product add/update failures
+            runCatching { db.execSQL("DROP TABLE IF EXISTS products_fts") }
         }
     }
 
@@ -132,11 +131,6 @@ class DatabaseHelper(context: Context) :
             $COL_PRODUCT_MIN_STOCK     INTEGER DEFAULT 5,
             $COL_PRODUCT_BARCODE       TEXT DEFAULT '',
             $COL_PRODUCT_GST           REAL DEFAULT 0)""")
-
-        db.execSQL("""CREATE VIRTUAL TABLE $TABLE_PRODUCTS_FTS
-            USING fts4(content="$TABLE_PRODUCTS",
-            $COL_PRODUCT_ID, $COL_PRODUCT_NAME,
-            $COL_PRODUCT_CATEGORY, $COL_PRODUCT_BARCODE)""")
 
         db.execSQL("""CREATE TABLE $TABLE_BILLS (
             $COL_BILL_ID            TEXT PRIMARY KEY,
@@ -180,14 +174,17 @@ class DatabaseHelper(context: Context) :
             $COL_EXPENSE_AMOUNT REAL NOT NULL,
             $COL_EXPENSE_DATE   INTEGER NOT NULL)""")
 
-        db.execSQL("CREATE INDEX idx_products_category  ON $TABLE_PRODUCTS($COL_PRODUCT_CATEGORY)")
-        db.execSQL("CREATE INDEX idx_products_barcode   ON $TABLE_PRODUCTS($COL_PRODUCT_BARCODE)")
-        db.execSQL("CREATE INDEX idx_bills_timestamp    ON $TABLE_BILLS($COL_BILL_TIMESTAMP)")
-        db.execSQL("CREATE INDEX idx_bills_customer     ON $TABLE_BILLS($COL_BILL_CUSTOMER_ID)")
-        db.execSQL("CREATE INDEX idx_bill_items_product ON $TABLE_BILL_ITEMS($COL_BI_PRODUCT_ID)")
+        // Indexes for fast LIKE search — replaces FTS
+        db.execSQL("CREATE INDEX idx_products_name     ON $TABLE_PRODUCTS($COL_PRODUCT_NAME)")
+        db.execSQL("CREATE INDEX idx_products_category ON $TABLE_PRODUCTS($COL_PRODUCT_CATEGORY)")
+        db.execSQL("CREATE INDEX idx_products_barcode  ON $TABLE_PRODUCTS($COL_PRODUCT_BARCODE)")
+        db.execSQL("CREATE INDEX idx_bills_timestamp   ON $TABLE_BILLS($COL_BILL_TIMESTAMP)")
+        db.execSQL("CREATE INDEX idx_bills_customer    ON $TABLE_BILLS($COL_BILL_CUSTOMER_ID)")
+        db.execSQL("CREATE INDEX idx_bi_product        ON $TABLE_BILL_ITEMS($COL_BI_PRODUCT_ID)")
     }
 
     // ── CUSTOMERS ────────────────────────────────────────────────────
+
     fun insertCustomer(c: Customer) =
         writableDatabase.insert(TABLE_CUSTOMERS, null, c.toCV()) != -1L
 
@@ -206,10 +203,11 @@ class DatabaseHelper(context: Context) :
 
     fun updateCustomer(c: Customer): Boolean {
         val cv = ContentValues().apply {
-            put(COL_CUSTOMER_NAME, c.name); put(COL_CUSTOMER_PHONE, c.phone)
+            put(COL_CUSTOMER_NAME, c.name)
+            put(COL_CUSTOMER_PHONE, c.phone)
             put(COL_CUSTOMER_ADDRESS, c.address)
-            put(COL_CUSTOMER_LATITUDE, c.latitude)
-            put(COL_CUSTOMER_LONGITUDE, c.longitude)
+            if (c.latitude != null) put(COL_CUSTOMER_LATITUDE, c.latitude)
+            if (c.longitude != null) put(COL_CUSTOMER_LONGITUDE, c.longitude)
             put(COL_CUSTOMER_TOTAL_PURCHASE, c.totalPurchase)
             put(COL_CUSTOMER_TOTAL_PAID, c.totalPaid)
             put(COL_CUSTOMER_BALANCE, c.balance)
@@ -229,15 +227,11 @@ class DatabaseHelper(context: Context) :
     }
 
     // ── PRODUCTS ─────────────────────────────────────────────────────
+    // Simple and reliable — no FTS complexity
+
     fun insertProduct(p: Product): Boolean {
-        val db = writableDatabase
-        db.beginTransaction()
-        return try {
-            val rowId = db.insert(TABLE_PRODUCTS, null, p.toCV())
-            if (rowId != -1L) syncFtsInsert(db, p, rowId)
-            db.setTransactionSuccessful(); rowId != -1L
-        } catch (e: Exception) { e.printStackTrace(); false }
-        finally { db.endTransaction() }
+        val new = p.copy(id = if (p.id.isBlank()) java.util.UUID.randomUUID().toString() else p.id)
+        return writableDatabase.insert(TABLE_PRODUCTS, null, new.toCV()) != -1L
     }
 
     fun getAllProducts(): List<Product> = buildList {
@@ -260,24 +254,13 @@ class DatabaseHelper(context: Context) :
 
     fun searchProducts(query: String): List<Product> {
         if (query.isBlank()) return getAllProducts()
-        val results = mutableListOf<Product>()
-        // FTS prefix search
-        try {
-            readableDatabase.rawQuery(
-                "SELECT p.* FROM $TABLE_PRODUCTS p " +
-                        "INNER JOIN $TABLE_PRODUCTS_FTS fts ON p.$COL_PRODUCT_ID = fts.$COL_PRODUCT_ID " +
-                        "WHERE $TABLE_PRODUCTS_FTS MATCH ? ORDER BY p.$COL_PRODUCT_NAME ASC",
-                arrayOf("$query*")
-            ).use { while (it.moveToNext()) results.add(it.toProduct()) }
-        } catch (_: Exception) {}
-        // LIKE fallback
-        if (results.isEmpty()) {
+        return buildList {
             readableDatabase.query(TABLE_PRODUCTS, null,
                 "$COL_PRODUCT_NAME LIKE ? OR $COL_PRODUCT_CATEGORY LIKE ? OR $COL_PRODUCT_BARCODE LIKE ?",
-                arrayOf("%$query%", "%$query%", "%$query%"), null, null, "$COL_PRODUCT_NAME ASC")
-                .use { while (it.moveToNext()) results.add(it.toProduct()) }
+                arrayOf("%$query%", "%$query%", "%$query%"),
+                null, null, "$COL_PRODUCT_NAME ASC")
+                .use { while (it.moveToNext()) add(it.toProduct()) }
         }
-        return results
     }
 
     fun getProductByBarcode(barcode: String): Product? {
@@ -299,46 +282,40 @@ class DatabaseHelper(context: Context) :
 
     fun getLowStockProducts(): List<Product> = buildList {
         readableDatabase.rawQuery(
-            "SELECT * FROM $TABLE_PRODUCTS WHERE $COL_PRODUCT_QUANTITY <= $COL_PRODUCT_MIN_STOCK " +
+            "SELECT * FROM $TABLE_PRODUCTS " +
+                    "WHERE $COL_PRODUCT_QUANTITY <= $COL_PRODUCT_MIN_STOCK " +
                     "ORDER BY $COL_PRODUCT_QUANTITY ASC", null)
             .use { while (it.moveToNext()) add(it.toProduct()) }
     }
 
     fun updateProduct(p: Product): Boolean {
-        val db = writableDatabase
-        db.beginTransaction()
-        return try {
-            val rows = db.update(TABLE_PRODUCTS, p.toCV(), "$COL_PRODUCT_ID=?", arrayOf(p.id))
-            db.execSQL("DELETE FROM $TABLE_PRODUCTS_FTS WHERE $COL_PRODUCT_ID=?", arrayOf(p.id))
-            syncFtsInsert(db, p, null)
-            db.setTransactionSuccessful(); rows > 0
-        } catch (e: Exception) { e.printStackTrace(); false }
-        finally { db.endTransaction() }
+        // toUpdateCV() excludes id — never update the primary key
+        return writableDatabase.update(TABLE_PRODUCTS, p.toUpdateCV(),
+            "$COL_PRODUCT_ID = ?", arrayOf(p.id)) > 0
     }
 
-    fun deleteProduct(id: String): Boolean {
-        writableDatabase.execSQL("DELETE FROM $TABLE_PRODUCTS_FTS WHERE $COL_PRODUCT_ID=?", arrayOf(id))
-        return writableDatabase.delete(TABLE_PRODUCTS, "$COL_PRODUCT_ID=?", arrayOf(id)) > 0
-    }
+    fun deleteProduct(id: String): Boolean =
+        writableDatabase.delete(TABLE_PRODUCTS, "$COL_PRODUCT_ID = ?", arrayOf(id)) > 0
 
     fun decrementProductStock(productId: String, qty: Int) {
         writableDatabase.execSQL(
-            "UPDATE $TABLE_PRODUCTS SET $COL_PRODUCT_QUANTITY = $COL_PRODUCT_QUANTITY - ? WHERE $COL_PRODUCT_ID = ?",
-            arrayOf(qty, productId))
+            "UPDATE $TABLE_PRODUCTS SET $COL_PRODUCT_QUANTITY = $COL_PRODUCT_QUANTITY - ? " +
+                    "WHERE $COL_PRODUCT_ID = ?", arrayOf(qty, productId))
     }
 
     fun incrementProductStock(productId: String, qty: Int) {
         writableDatabase.execSQL(
-            "UPDATE $TABLE_PRODUCTS SET $COL_PRODUCT_QUANTITY = $COL_PRODUCT_QUANTITY + ? WHERE $COL_PRODUCT_ID = ?",
-            arrayOf(qty, productId))
+            "UPDATE $TABLE_PRODUCTS SET $COL_PRODUCT_QUANTITY = $COL_PRODUCT_QUANTITY + ? " +
+                    "WHERE $COL_PRODUCT_ID = ?", arrayOf(qty, productId))
     }
 
     // ── BILLS ────────────────────────────────────────────────────────
+
     fun insertBillWithItems(bill: Bill): Boolean {
         val db = writableDatabase
         db.beginTransaction()
         return try {
-            val cv = ContentValues().apply {
+            db.insertOrThrow(TABLE_BILLS, null, ContentValues().apply {
                 put(COL_BILL_ID, bill.id)
                 put(COL_BILL_CUSTOMER_ID, bill.customerId)
                 put(COL_BILL_CUSTOMER_NAME, bill.customerName)
@@ -350,8 +327,7 @@ class DatabaseHelper(context: Context) :
                 put(COL_BILL_TIMESTAMP, bill.timestamp)
                 put(COL_BILL_IS_REFUNDED, 0)
                 put(COL_BILL_REFUNDED_AT, 0L)
-            }
-            db.insertOrThrow(TABLE_BILLS, null, cv)
+            })
             bill.items.forEach { item ->
                 db.insertOrThrow(TABLE_BILL_ITEMS, null, ContentValues().apply {
                     put(COL_BI_ID, java.util.UUID.randomUUID().toString())
@@ -375,13 +351,13 @@ class DatabaseHelper(context: Context) :
             put(COL_BILL_IS_REFUNDED, 1)
             put(COL_BILL_REFUNDED_AT, System.currentTimeMillis())
         }
-        return writableDatabase.update(TABLE_BILLS, cv,
-            "$COL_BILL_ID=?", arrayOf(billId)) > 0
+        return writableDatabase.update(TABLE_BILLS, cv, "$COL_BILL_ID=?", arrayOf(billId)) > 0
     }
 
-    fun getAllBills(): List<Bill>                    = queryBills(null, null)
-    fun getBillsByDateRange(f: Long, t: Long)        = queryBills("$COL_BILL_TIMESTAMP BETWEEN ? AND ?", arrayOf(f.toString(), t.toString()))
-    fun getBillsByCustomer(customerId: String)       = queryBills("$COL_BILL_CUSTOMER_ID=?", arrayOf(customerId))
+    fun getAllBills(): List<Bill>              = queryBills(null, null)
+    fun getBillsByDateRange(f: Long, t: Long)  = queryBills("$COL_BILL_TIMESTAMP BETWEEN ? AND ?",
+        arrayOf(f.toString(), t.toString()))
+    fun getBillsByCustomer(id: String)         = queryBills("$COL_BILL_CUSTOMER_ID=?", arrayOf(id))
 
     private fun queryBills(where: String?, args: Array<String>?): List<Bill> = buildList {
         readableDatabase.query(TABLE_BILLS, null, where, args, null, null,
@@ -422,6 +398,7 @@ class DatabaseHelper(context: Context) :
     }
 
     // ── LEDGER ───────────────────────────────────────────────────────
+
     fun insertLedgerEntry(l: Ledger): Boolean {
         val cv = ContentValues().apply {
             put(COL_LEDGER_ID, l.id); put(COL_LEDGER_CUSTOMER_ID, l.customerId)
@@ -448,6 +425,7 @@ class DatabaseHelper(context: Context) :
     }
 
     // ── EXPENSES ─────────────────────────────────────────────────────
+
     fun insertExpense(e: Expense): Boolean {
         val cv = ContentValues().apply {
             put(COL_EXPENSE_ID, e.id); put(COL_EXPENSE_TITLE, e.title)
@@ -473,18 +451,7 @@ class DatabaseHelper(context: Context) :
     fun deleteExpense(id: String) =
         writableDatabase.delete(TABLE_EXPENSES, "$COL_EXPENSE_ID=?", arrayOf(id)) > 0
 
-    // ── Helpers ──────────────────────────────────────────────────────
-    private fun syncFtsInsert(db: SQLiteDatabase, p: Product, rowId: Long?) {
-        val sql = if (rowId != null)
-            "INSERT INTO $TABLE_PRODUCTS_FTS(rowid,$COL_PRODUCT_ID,$COL_PRODUCT_NAME,$COL_PRODUCT_CATEGORY,$COL_PRODUCT_BARCODE) VALUES(?,?,?,?,?)"
-        else
-            "INSERT INTO $TABLE_PRODUCTS_FTS($COL_PRODUCT_ID,$COL_PRODUCT_NAME,$COL_PRODUCT_CATEGORY,$COL_PRODUCT_BARCODE) VALUES(?,?,?,?)"
-        val args = if (rowId != null)
-            arrayOf(rowId, p.id, p.name, p.category, p.barcode)
-        else
-            arrayOf(p.id, p.name, p.category, p.barcode)
-        db.execSQL(sql, args)
-    }
+    // ── Cursor extensions ─────────────────────────────────────────────
 
     private fun android.database.Cursor.toCustomer() = Customer(
         id            = getString(getColumnIndexOrThrow(COL_CUSTOMER_ID)),
@@ -501,24 +468,26 @@ class DatabaseHelper(context: Context) :
     )
 
     private fun android.database.Cursor.toProduct() = Product(
-        id = getString(getColumnIndexOrThrow(COL_PRODUCT_ID)),
-        name = getString(getColumnIndexOrThrow(COL_PRODUCT_NAME)),
+        id           = getString(getColumnIndexOrThrow(COL_PRODUCT_ID)),
+        name         = getString(getColumnIndexOrThrow(COL_PRODUCT_NAME)),
         sellingPrice = getDouble(getColumnIndexOrThrow(COL_PRODUCT_SELLING_PRICE)),
-        costPrice = getDouble(getColumnIndexOrThrow(COL_PRODUCT_COST_PRICE)),
-        quantity = getInt(getColumnIndexOrThrow(COL_PRODUCT_QUANTITY)),
-        unit = getString(getColumnIndexOrThrow(COL_PRODUCT_UNIT)) ?: "Piece",
-        category = getString(getColumnIndexOrThrow(COL_PRODUCT_CATEGORY)) ?: "",
-        minStockLevel = getInt(getColumnIndexOrThrow(COL_PRODUCT_MIN_STOCK)),
-        barcode = getString(getColumnIndexOrThrow(COL_PRODUCT_BARCODE)) ?: "",
-        gstPercent = getDouble(getColumnIndexOrThrow(COL_PRODUCT_GST))
+        costPrice    = getDouble(getColumnIndexOrThrow(COL_PRODUCT_COST_PRICE)),
+        quantity     = getInt(getColumnIndexOrThrow(COL_PRODUCT_QUANTITY)),
+        unit         = getString(getColumnIndexOrThrow(COL_PRODUCT_UNIT)) ?: "Piece",
+        category     = getString(getColumnIndexOrThrow(COL_PRODUCT_CATEGORY)) ?: "",
+        minStockLevel= getInt(getColumnIndexOrThrow(COL_PRODUCT_MIN_STOCK)),
+        barcode      = getString(getColumnIndexOrThrow(COL_PRODUCT_BARCODE)) ?: "",
+        gstPercent   = getDouble(getColumnIndexOrThrow(COL_PRODUCT_GST))
     )
 
     private fun android.database.Cursor.toExpense() = Expense(
-        id = getString(getColumnIndexOrThrow(COL_EXPENSE_ID)),
-        title = getString(getColumnIndexOrThrow(COL_EXPENSE_TITLE)),
+        id     = getString(getColumnIndexOrThrow(COL_EXPENSE_ID)),
+        title  = getString(getColumnIndexOrThrow(COL_EXPENSE_TITLE)),
         amount = getDouble(getColumnIndexOrThrow(COL_EXPENSE_AMOUNT)),
-        date = getLong(getColumnIndexOrThrow(COL_EXPENSE_DATE))
+        date   = getLong(getColumnIndexOrThrow(COL_EXPENSE_DATE))
     )
+
+    // ── ContentValues helpers ─────────────────────────────────────────
 
     private fun Customer.toCV() = ContentValues().apply {
         put(COL_CUSTOMER_ID, id); put(COL_CUSTOMER_NAME, name)
@@ -526,11 +495,22 @@ class DatabaseHelper(context: Context) :
         if (latitude != null) put(COL_CUSTOMER_LATITUDE, latitude)
         if (longitude != null) put(COL_CUSTOMER_LONGITUDE, longitude)
         put(COL_CUSTOMER_TOTAL_PURCHASE, totalPurchase)
-        put(COL_CUSTOMER_TOTAL_PAID, totalPaid); put(COL_CUSTOMER_BALANCE, balance)
+        put(COL_CUSTOMER_TOTAL_PAID, totalPaid)
+        put(COL_CUSTOMER_BALANCE, balance)
     }
 
+    // Used for INSERT — includes id
     private fun Product.toCV() = ContentValues().apply {
         put(COL_PRODUCT_ID, id); put(COL_PRODUCT_NAME, name)
+        put(COL_PRODUCT_SELLING_PRICE, sellingPrice); put(COL_PRODUCT_COST_PRICE, costPrice)
+        put(COL_PRODUCT_QUANTITY, quantity); put(COL_PRODUCT_UNIT, unit)
+        put(COL_PRODUCT_CATEGORY, category); put(COL_PRODUCT_MIN_STOCK, minStockLevel)
+        put(COL_PRODUCT_BARCODE, barcode); put(COL_PRODUCT_GST, gstPercent)
+    }
+
+    // Used for UPDATE — excludes id (never update primary key)
+    private fun Product.toUpdateCV() = ContentValues().apply {
+        put(COL_PRODUCT_NAME, name)
         put(COL_PRODUCT_SELLING_PRICE, sellingPrice); put(COL_PRODUCT_COST_PRICE, costPrice)
         put(COL_PRODUCT_QUANTITY, quantity); put(COL_PRODUCT_UNIT, unit)
         put(COL_PRODUCT_CATEGORY, category); put(COL_PRODUCT_MIN_STOCK, minStockLevel)

@@ -16,6 +16,7 @@ import androidx.navigation.NavController
 import com.animan.wholesalemanager.data.local.Bill
 import com.animan.wholesalemanager.data.local.Customer
 import com.animan.wholesalemanager.printer.PrinterManager
+import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.utils.WhatsAppShare
 import com.animan.wholesalemanager.viewmodel.BillViewModel
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
@@ -106,17 +107,17 @@ fun BillHistoryScreen(navController: NavController) {
 
                                 Row(Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Text("Total: ₹${bill.grandTotal.toInt()}",
+                                    Text("Total: ${bill.grandTotal.toRupees()}",
                                         style = MaterialTheme.typography.bodySmall)
                                     if (bill.gstTotal > 0)
-                                        Text("GST: ₹${bill.gstTotal.toInt()}",
+                                        Text("GST: ${bill.gstTotal.toRupees()}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("Paid: ₹${bill.paidAmount.toInt()}",
+                                    Text("Paid: ${bill.paidAmount.toRupees()}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary)
                                     if (bill.balance > 0)
-                                        Text("Due: ₹${bill.balance.toInt()}",
+                                        Text("Due: ${bill.balance.toRupees()}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.error)
                                 }

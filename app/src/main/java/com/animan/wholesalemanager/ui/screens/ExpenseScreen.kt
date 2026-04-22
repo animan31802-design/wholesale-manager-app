@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.animan.wholesalemanager.utils.PriceUtils.isValidPriceInput
+import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.viewmodel.ExpenseViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -64,7 +66,7 @@ fun ExpenseScreen() {
                 ) {
                     Text("Total expenses", style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer)
-                    Text("₹${viewModel.totalExpense.value.toInt()}",
+                    Text(viewModel.totalExpense.value.toRupees(),
                         style = MaterialTheme.typography.headlineSmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer)
                 }
@@ -89,7 +91,7 @@ fun ExpenseScreen() {
                             modifier = Modifier.fillMaxWidth(), singleLine = true
                         )
                         OutlinedTextField(
-                            value = amount, onValueChange = { amount = it },
+                            value = amount, onValueChange = { if (isValidPriceInput(it)) amount = it },
                             label = { Text("Amount (₹)") },
                             modifier = Modifier.fillMaxWidth(), singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
@@ -163,7 +165,7 @@ fun ExpenseScreen() {
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text("₹${expense.amount.toInt()}",
+                                    Text(expense.amount.toRupees(),
                                         style = MaterialTheme.typography.titleMedium,
                                         color = MaterialTheme.colorScheme.error)
                                     IconButton(

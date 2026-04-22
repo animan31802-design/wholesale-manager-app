@@ -17,6 +17,8 @@ import androidx.navigation.NavController
 import com.animan.wholesalemanager.data.local.ConsumptionItem
 import com.animan.wholesalemanager.data.local.Expense
 import com.animan.wholesalemanager.utils.MoneyUtils.roundMoney
+import com.animan.wholesalemanager.utils.PriceUtils.formatPrice
+import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.viewmodel.ExpenseViewModel
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
 import java.text.SimpleDateFormat
@@ -86,7 +88,7 @@ fun StockConsumptionScreen(navController: NavController) {
                             Text("${consumedItems.size} product(s) selected",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Text("Total cost: ₹${totalCost.toInt()}",
+                            Text("Total cost: ${totalCost.toRupees()}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer)
                         }
@@ -117,7 +119,7 @@ fun StockConsumptionScreen(navController: NavController) {
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(item.name, style = MaterialTheme.typography.titleSmall)
-                                    Text("Cost: ₹${item.costPrice} × ${item.quantity} = ₹${item.totalCost.toInt()}",
+                                    Text("Cost: ₹${item.costPrice.formatPrice()} × ${item.quantity} = ₹${item.totalCost.formatPrice()}",
                                         style = MaterialTheme.typography.bodySmall)
                                 }
                                 Row(verticalAlignment = Alignment.CenterVertically,
@@ -217,7 +219,7 @@ fun StockConsumptionScreen(navController: NavController) {
                     Text("This will:")
                     Spacer(Modifier.height(8.dp))
                     Text("• Reduce stock for ${consumedItems.size} product(s)")
-                    Text("• Record ₹${totalCost.toInt()} as an expense ($reason)")
+                    Text("• Record ${totalCost.toRupees()} as an expense ($reason)")
                     Text("• This affects profit calculations")
                     Spacer(Modifier.height(8.dp))
                     Text("Date: ${dateFormat.format(Date())}")
@@ -241,7 +243,7 @@ fun StockConsumptionScreen(navController: NavController) {
                         title  = "Stock consumption — $reason (${consumedItems.size} item(s))",
                         amount = totalCost
                     ) {
-                        message = "Recorded. Stock reduced. ₹${totalCost.toInt()} added as expense."
+                        message = "Recorded. Stock reduced. ${totalCost.toRupees()} added as expense."
                         consumedItems.clear()
                     }
                 }) { Text("Confirm") }

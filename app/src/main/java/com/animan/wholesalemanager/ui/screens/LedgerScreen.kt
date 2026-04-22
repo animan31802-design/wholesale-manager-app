@@ -14,6 +14,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.animan.wholesalemanager.data.local.Customer
+import com.animan.wholesalemanager.utils.PriceUtils.formatPrice
+import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 import com.animan.wholesalemanager.viewmodel.LedgerViewModel
 import java.text.SimpleDateFormat
@@ -71,10 +73,10 @@ fun LedgerScreen(customer: Customer, navController: NavController? = null) {
                 Column(modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                        Text("Total purchase"); Text("₹${customer.totalPurchase.toInt()}")
+                        Text("Total purchase"); Text(customer.totalPurchase.toRupees())
                     }
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                        Text("Total paid"); Text("₹${customer.totalPaid.toInt()}")
+                        Text("Total paid"); Text(customer.totalPaid.toRupees())
                     }
                     HorizontalDivider()
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
@@ -83,7 +85,7 @@ fun LedgerScreen(customer: Customer, navController: NavController? = null) {
                             color = if (customer.balance > 0)
                                 MaterialTheme.colorScheme.onErrorContainer
                             else MaterialTheme.colorScheme.onPrimaryContainer)
-                        Text("₹${customer.balance.toInt()}",
+                        Text(customer.balance.toRupees(),
                             style = MaterialTheme.typography.titleSmall,
                             color = if (customer.balance > 0)
                                 MaterialTheme.colorScheme.onErrorContainer
@@ -106,10 +108,10 @@ fun LedgerScreen(customer: Customer, navController: NavController? = null) {
                         // Color coding: CREDIT=red(they owe more), PAYMENT=green(they paid),
                         // REFUND=purple(we reversed a bill)
                         val (amountText, amountColor, typeLabel) = when (entry.type) {
-                            "CREDIT"  -> Triple("+₹${entry.amount.toInt()}", MaterialTheme.colorScheme.error,   "Bill")
-                            "PAYMENT" -> Triple("-₹${entry.amount.toInt()}", MaterialTheme.colorScheme.primary,  "Payment")
-                            "REFUND"  -> Triple("-₹${entry.amount.toInt()}", Color(0xFF7C4DFF),                 "Refund")
-                            else      -> Triple("₹${entry.amount.toInt()}",  MaterialTheme.colorScheme.onSurface,"")
+                            "CREDIT"  -> Triple("+₹${entry.amount.formatPrice()}", MaterialTheme.colorScheme.error,   "Bill")
+                            "PAYMENT" -> Triple("-₹${entry.amount.formatPrice()}", MaterialTheme.colorScheme.primary,  "Payment")
+                            "REFUND"  -> Triple("-₹${entry.amount.formatPrice()}", Color(0xFF7C4DFF),                 "Refund")
+                            else      -> Triple("₹${entry.amount.formatPrice()}",  MaterialTheme.colorScheme.onSurface,"")
                         }
 
                         Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {

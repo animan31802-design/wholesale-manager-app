@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.animan.wholesalemanager.data.local.ProductReport
+import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.viewmodel.ReportViewModel
 import com.github.mikephil.charting.charts.BarChart
 import com.github.mikephil.charting.charts.LineChart
@@ -140,7 +141,7 @@ fun ReportHeader() {
 fun AnimatedNumber(target: Double): String {
     val v by animateFloatAsState(targetValue = target.toFloat(), animationSpec = tween(1000),
         label = "money")
-    return "₹${v.toInt()}"
+    return "₹${"%.2f".format(v)}"
 }
 
 @Composable
@@ -166,8 +167,8 @@ fun InsightCard(viewModel: ReportViewModel) {
     val gross = viewModel.grossProfit.value
     val net   = viewModel.netProfit.value
     val message = when {
-        net > 0   -> "Net profit: ₹${net.toInt()} after expenses"
-        net < 0   -> "Net loss of ₹${(-net).toInt()} — check expenses"
+        net > 0   -> "Net profit: ${net.toRupees()} after expenses"
+        net < 0   -> "Net loss of ${(-net).toRupees()} — check expenses"
         gross > 0 -> "Sales margin is positive but expenses offset it"
         else      -> "No sales recorded yet"
     }
@@ -179,10 +180,10 @@ fun InsightCard(viewModel: ReportViewModel) {
             Spacer(Modifier.height(6.dp))
             Text(message)
             Spacer(Modifier.height(4.dp))
-            Text("Gross profit (margin): ₹${viewModel.grossProfit.value.toInt()}",
+            Text("Gross profit (margin): ${viewModel.grossProfit.value.toRupees()}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Today's sales: ₹${viewModel.todaySales.value.toInt()}",
+            Text("Today's sales: ${viewModel.todaySales.value.toRupees()}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -212,7 +213,7 @@ fun PremiumProductItem(product: ProductReport) {
                 Text(product.name, style = MaterialTheme.typography.titleMedium)
                 Text("Sold: ${product.totalQty}", style = MaterialTheme.typography.bodySmall)
             }
-            Text("₹${product.totalRevenue.toInt()}", style = MaterialTheme.typography.titleMedium,
+            Text(product.totalRevenue.toRupees(), style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.primary)
         }
     }
