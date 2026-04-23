@@ -20,6 +20,7 @@ import com.animan.wholesalemanager.utils.AppPreferences
 import com.animan.wholesalemanager.utils.Language
 import com.animan.wholesalemanager.utils.UpiQrGenerator
 import com.animan.wholesalemanager.viewmodel.BackupViewModel
+import com.animan.wholesalemanager.work.BackupScheduler
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,6 +184,7 @@ fun SettingsScreen(navController: NavController) {
                 }
                 Switch(checked = backupEnabled, onCheckedChange = {
                     backupEnabled = it; AppPreferences.setBackupEnabled(context, it)
+                    BackupScheduler.schedule(context)
                 })
             }
 
@@ -191,13 +193,13 @@ fun SettingsScreen(navController: NavController) {
                 frequencyOptions.forEach { option ->
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         RadioButton(selected = backupFrequency == option,
-                            onClick = { backupFrequency = option; AppPreferences.setBackupFrequency(context, option) })
+                            onClick = { backupFrequency = option; AppPreferences.setBackupFrequency(context, option); BackupScheduler.schedule(context) })
                         Text(option, modifier = Modifier.padding(start = 8.dp))
                     }
                 }
             }
 
-            val lastBackup = AppPreferences.getLastBackupTime(context)
+            val lastBackup = backupViewModel.lastBackupTime.value
             if (lastBackup.isNotEmpty())
                 Text("Last backup: $lastBackup", style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)

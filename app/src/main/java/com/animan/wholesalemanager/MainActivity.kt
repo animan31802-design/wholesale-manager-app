@@ -13,6 +13,7 @@ import androidx.navigation.compose.rememberNavController
 import com.animan.wholesalemanager.ui.screens.*
 import com.animan.wholesalemanager.ui.theme.WholesaleManagerTheme
 import com.animan.wholesalemanager.utils.AppLanguage
+import com.animan.wholesalemanager.work.BackupScheduler
 
 class MainActivity : ComponentActivity() {
 
@@ -22,6 +23,8 @@ class MainActivity : ComponentActivity() {
 
         // Load saved language BEFORE setContent so first frame is correct
         AppLanguage.load(this)
+
+        BackupScheduler.schedule(this)
 
         setContent {
             WholesaleManagerTheme {
