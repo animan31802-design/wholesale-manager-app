@@ -20,58 +20,192 @@ class ReportViewModel(app: Application) : AndroidViewModel(app) {
     var todaySales   = mutableStateOf(0.0)
     var totalBills   = mutableStateOf(0)
     var totalExpense = mutableStateOf(0.0)
-    var grossProfit  = mutableStateOf(0.0)   // margin on sales
-    var netProfit    = mutableStateOf(0.0)   // gross - expenses
-    // Keep "profit" alias so existing UI doesn't break
+    var grossProfit  = mutableStateOf(0.0)
+    var netProfit    = mutableStateOf(0.0)
     val profit get() = netProfit
 
     var isLoading    = mutableStateOf(false)
     var errorMessage = mutableStateOf<String?>(null)
 
-    private val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    // ── Navigation offset — 0 = current period, -1 = one period back ──
+    var periodOffset = mutableStateOf(0)
 
-    // Round to 2 decimal places to avoid floating point noise like 0.2000000045
+    // ── Custom date range ─────────────────────────────────────────────
+    var customFromDate = mutableStateOf<Long?>(null)
+    var customToDate   = mutableStateOf<Long?>(null)
+
+    // ── Active filter ─────────────────────────────────────────────────
+    var currentFilter = mutableStateOf("All")
+
+    private val dateFormat      = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    private val displayFmt      = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    private val displayFmtShort = SimpleDateFormat("dd MMM", Locale.getDefault())
+
     private fun Double.roundMoney() = Math.round(this * 100) / 100.0
 
-    // ── Date range helpers ────────────────────────────────────────────
-    private fun todayRange(): Pair<Long, Long> {
-        val cal = Calendar.getInstance()
+    // ── Navigation ────────────────────────────────────────────────────
+
+    fun navigatePrevious() {
+        if (currentFilter.value in listOf("Today", "Week", "Month", "Year")) {
+            periodOffset.value -= 1
+            fetchAll(currentFilter.value)
+        }
+    }
+
+    fun navigateNext() {
+        if (canNavigateNext) {
+            periodOffset.value += 1
+            fetchAll(currentFilter.value)
+        }
+    }
+
+    val canNavigateNext: Boolean
+        get() = currentFilter.value in listOf("Today", "Week", "Month", "Year")
+                && periodOffset.value < 0
+
+    val showNavArrows: Boolean
+        get() = currentFilter.value in listOf("Today", "Week", "Month", "Year")
+
+    // ── Period label for the header ───────────────────────────────────
+    fun periodLabel(): String {
+        val offset = periodOffset.value
+        return when (currentFilter.value) {
+            "All"    -> "All Time"
+            "Custom" -> {
+                val from = customFromDate.value ?: return "Custom Range"
+                val to   = customToDate.value   ?: return "Custom Range"
+                "${displayFmtShort.format(Date(from))} – ${displayFmtShort.format(Date(to))}"
+            }
+            "Today"  -> when (offset) {
+                0    -> "Today"
+                -1   -> "Yesterday"
+                else -> {
+                    val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, offset) }
+                    displayFmt.format(cal.time)
+                }
+            }
+            "Week"   -> {
+                val (from, to) = weekRange(offset)
+                val label = "${displayFmtShort.format(Date(from))} – ${displayFmtShort.format(Date(to))}"
+                if (offset == 0) "This Week  ($label)" else label
+            }
+            "Month"  -> {
+                val cal = Calendar.getInstance().apply { add(Calendar.MONTH, offset) }
+                SimpleDateFormat("MMMM yyyy", Locale.getDefault()).format(cal.time)
+            }
+            "Year"   -> {
+                val cal = Calendar.getInstance().apply { add(Calendar.YEAR, offset) }
+                SimpleDateFormat("yyyy", Locale.getDefault()).format(cal.time)
+            }
+            else -> ""
+        }
+    }
+
+    // ── Date range helpers (offset-aware) ────────────────────────────
+
+    private fun todayRange(offset: Int = 0): Pair<Long, Long> {
+        val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, offset) }
         cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
         val start = cal.timeInMillis
         cal.set(Calendar.HOUR_OF_DAY, 23); cal.set(Calendar.MINUTE, 59)
-        cal.set(Calendar.SECOND, 59)
+        cal.set(Calendar.SECOND, 59); cal.set(Calendar.MILLISECOND, 999)
         return start to cal.timeInMillis
     }
 
-    private fun weekRange(): Pair<Long, Long> {
-        val cal = Calendar.getInstance()
+    private fun weekRange(offset: Int = 0): Pair<Long, Long> {
+        val cal = Calendar.getInstance().apply { add(Calendar.WEEK_OF_YEAR, offset) }
         cal.set(Calendar.DAY_OF_WEEK, cal.firstDayOfWeek)
         cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
         val start = cal.timeInMillis
-        return start to System.currentTimeMillis()
+        val endCal = cal.clone() as Calendar
+        endCal.add(Calendar.DAY_OF_WEEK, 6)
+        endCal.set(Calendar.HOUR_OF_DAY, 23); endCal.set(Calendar.MINUTE, 59)
+        endCal.set(Calendar.SECOND, 59); endCal.set(Calendar.MILLISECOND, 999)
+        return start to endCal.timeInMillis
     }
 
-    private fun monthRange(): Pair<Long, Long> {
-        val cal = Calendar.getInstance()
+    private fun monthRange(offset: Int = 0): Pair<Long, Long> {
+        val cal = Calendar.getInstance().apply { add(Calendar.MONTH, offset) }
         cal.set(Calendar.DAY_OF_MONTH, 1)
         cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
         cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
         val start = cal.timeInMillis
-        return start to System.currentTimeMillis()
+        val endCal = cal.clone() as Calendar
+        endCal.set(Calendar.DAY_OF_MONTH, endCal.getActualMaximum(Calendar.DAY_OF_MONTH))
+        endCal.set(Calendar.HOUR_OF_DAY, 23); endCal.set(Calendar.MINUTE, 59)
+        endCal.set(Calendar.SECOND, 59); endCal.set(Calendar.MILLISECOND, 999)
+        return start to endCal.timeInMillis
     }
 
-    // ── Main fetch — called when filter chip changes ──────────────────
-    fun fetchReport(filter: String = "All") {
-        isLoading.value = true
+    private fun yearRange(offset: Int = 0): Pair<Long, Long> {
+        val cal = Calendar.getInstance().apply { add(Calendar.YEAR, offset) }
+        cal.set(Calendar.DAY_OF_YEAR, 1)
+        cal.set(Calendar.HOUR_OF_DAY, 0); cal.set(Calendar.MINUTE, 0)
+        cal.set(Calendar.SECOND, 0); cal.set(Calendar.MILLISECOND, 0)
+        val start = cal.timeInMillis
+        val endCal = cal.clone() as Calendar
+        endCal.set(Calendar.DAY_OF_YEAR, endCal.getActualMaximum(Calendar.DAY_OF_YEAR))
+        endCal.set(Calendar.HOUR_OF_DAY, 23); endCal.set(Calendar.MINUTE, 59)
+        endCal.set(Calendar.SECOND, 59); endCal.set(Calendar.MILLISECOND, 999)
+        return start to endCal.timeInMillis
+    }
 
-        val (from, to) = when (filter) {
-            "Today" -> todayRange()
-            "Week"  -> weekRange()
-            "Month" -> monthRange()
-            else    -> 0L to System.currentTimeMillis()
+    private fun customRange(): Pair<Long, Long> {
+        val from = customFromDate.value ?: 0L
+        val to   = customToDate.value?.let { endOfDay(it) } ?: System.currentTimeMillis()
+        return from to to
+    }
+
+    private fun endOfDay(epochMillis: Long): Long {
+        val cal = Calendar.getInstance().apply { timeInMillis = epochMillis }
+        cal.set(Calendar.HOUR_OF_DAY, 23); cal.set(Calendar.MINUTE, 59)
+        cal.set(Calendar.SECOND, 59); cal.set(Calendar.MILLISECOND, 999)
+        return cal.timeInMillis
+    }
+
+    private fun rangeFor(filter: String): Pair<Long, Long> {
+        val offset = periodOffset.value
+        return when (filter) {
+            "Today"  -> todayRange(offset)
+            "Week"   -> weekRange(offset)
+            "Month"  -> monthRange(offset)
+            "Year"   -> yearRange(offset)
+            "Custom" -> customRange()
+            else     -> 0L to System.currentTimeMillis()
         }
+    }
+
+    // ── Public entry points ───────────────────────────────────────────
+
+    /** Fetch all 3 data sets for the given filter */
+    fun fetchAll(filter: String = currentFilter.value) {
+        currentFilter.value = filter
+        fetchReport(filter)
+        fetchTopProducts(filter)
+        fetchDailySales(filter)
+    }
+
+    /** User tapped a filter chip — reset offset to 0 (current period) */
+    fun selectFilter(filter: String) {
+        periodOffset.value = 0
+        fetchAll(filter)
+    }
+
+    /** User confirmed a custom date range in the picker dialog */
+    fun applyCustomRange(fromMillis: Long, toMillis: Long) {
+        customFromDate.value = fromMillis
+        customToDate.value   = toMillis
+        periodOffset.value   = 0
+        fetchAll("Custom")
+    }
+
+    // ── Internal fetch methods ────────────────────────────────────────
+
+    fun fetchReport(filter: String = currentFilter.value) {
+        isLoading.value = true
+        val (from, to) = rangeFor(filter)
 
         expenseRepo.getExpenses(
             onResult = { expenses ->
@@ -91,16 +225,14 @@ class ReportViewModel(app: Application) : AndroidViewModel(app) {
                 billFetch(
                     { bills ->
                         val activeBills = bills.filter { !it.isRefunded }
-                        totalBills.value  = activeBills.size
-                        totalSales.value  = activeBills.sumOf { it.grandTotal }.roundMoney()
+                        totalBills.value = activeBills.size
+                        totalSales.value = activeBills.sumOf { it.grandTotal }.roundMoney()
 
-                        // Today's sales within the fetched set
-                        val (tStart, tEnd) = todayRange()
+                        val (tStart, tEnd) = todayRange(0)
                         todaySales.value = activeBills
                             .filter { it.timestamp in tStart..tEnd }
                             .sumOf { it.grandTotal }.roundMoney()
 
-                        // FIX 7: gross profit = sum of (sellingPrice - costPrice) * qty
                         val gross = activeBills.sumOf { bill ->
                             bill.items.sumOf { item ->
                                 ((item.price - item.costPrice) * item.quantity).roundMoney()
@@ -108,8 +240,7 @@ class ReportViewModel(app: Application) : AndroidViewModel(app) {
                         }.roundMoney()
                         grossProfit.value = gross
                         netProfit.value   = (gross - expenseTotal).roundMoney()
-
-                        isLoading.value = false
+                        isLoading.value   = false
                     },
                     { error -> errorMessage.value = error; isLoading.value = false }
                 )
@@ -118,14 +249,8 @@ class ReportViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun fetchTopProducts(filter: String = "All") {
-        val (from, to) = when (filter) {
-            "Today" -> todayRange()
-            "Week"  -> weekRange()
-            "Month" -> monthRange()
-            else    -> 0L to System.currentTimeMillis()
-        }
-
+    fun fetchTopProducts(filter: String = currentFilter.value) {
+        val (from, to) = rangeFor(filter)
         val fetch: (onResult: (List<com.animan.wholesalemanager.data.local.Bill>) -> Unit,
                     onError: (String) -> Unit) -> Unit =
             if (filter == "All") billRepo::getBills
@@ -154,14 +279,8 @@ class ReportViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun fetchDailySales(filter: String = "All") {
-        val (from, to) = when (filter) {
-            "Today" -> todayRange()
-            "Week"  -> weekRange()
-            "Month" -> monthRange()
-            else    -> 0L to System.currentTimeMillis()
-        }
-
+    fun fetchDailySales(filter: String = currentFilter.value) {
+        val (from, to) = rangeFor(filter)
         val fetch: (onResult: (List<com.animan.wholesalemanager.data.local.Bill>) -> Unit,
                     onError: (String) -> Unit) -> Unit =
             if (filter == "All") billRepo::getBills

@@ -15,6 +15,7 @@ import com.animan.wholesalemanager.utils.AppPreferences
 import com.animan.wholesalemanager.utils.BluetoothPrinter
 import com.animan.wholesalemanager.utils.Language
 import com.animan.wholesalemanager.utils.PrinterPreferences
+import com.animan.wholesalemanager.utils.TamilTransliterator
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -23,12 +24,30 @@ class PrinterManager {
     private val printer    = BluetoothPrinter()
     private val dateFormat = SimpleDateFormat("dd/MM/yyyy hh:mm a", Locale.getDefault())
 
-    // ── 3-inch thermal printer = 48 chars at standard font ──────────
-    // Most common ESC/POS 3-inch (80mm) printers print 48 chars/line
-    // at normal size. 2-inch (58mm) printers print 32 chars/line.
-    // If content was fitting in 2 inches before, width was set to 32.
+    // BluPrints BPMR3-BT — 80mm paper, 48 chars/line at Font A (normal)
     private val W = 48
 
+    // ── ESC/POS constants ─────────────────────────────────────────────
+    companion object {
+        const val RESET         = "\u001B\u0040"
+        const val ALIGN_CENTER  = "\u001B\u0061\u0001"
+        const val ALIGN_LEFT    = "\u001B\u0061\u0000"
+        const val SIZE_NORMAL   = "\u001B\u0021\u0000"
+        const val SIZE_BOLD     = "\u001B\u0021\u0008"
+        const val SIZE_BIG      = "\u001B\u0021\u0030"
+        const val SIZE_BIG_BOLD = "\u001B\u0021\u0038"
+        const val FONT_B        = "\u001B\u004D\u0001"
+        const val FONT_A        = "\u001B\u004D\u0000"
+        const val UNDERLINE_ON  = "\u001B\u002D\u0001"
+        const val UNDERLINE_OFF = "\u001B\u002D\u0000"
+        const val FULL_CUT      = "\u001D\u0056\u0041\u0005"
+    }
+
+    // ── Convenience: transliterate Tamil → Roman for printer output ───
+    // Only converts if Tamil is present; English/numbers pass through unchanged.
+    private fun p(text: String) = TamilTransliterator.forPrinter(text)
+
+    // ── Device resolution ─────────────────────────────────────────────
     private fun resolveDevice(context: Context): Pair<BluetoothDevice?, String> {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
@@ -40,20 +59,17 @@ class PrinterManager {
         } else {
             @Suppress("DEPRECATION") BluetoothAdapter.getDefaultAdapter()
         }
-
         if (adapter == null || !adapter.isEnabled) return null to "Bluetooth is not enabled"
 
         val devices = try { adapter.bondedDevices } catch (e: SecurityException) {
             return null to "Bluetooth permission denied"
         }
-
         val savedAddress = PrinterPreferences.getSavedAddress(context)
         if (savedAddress != null) {
             val device = devices?.firstOrNull { it.address == savedAddress }
             if (device != null) return device to ""
             return null to "Saved printer not found. Re-select in Settings."
         }
-
         val fallback = devices?.firstOrNull {
             try { it.name.contains("printer", ignoreCase = true) }
             catch (_: SecurityException) { false }
@@ -62,6 +78,7 @@ class PrinterManager {
         else null to "No printer selected. Go to Settings -> Select printer."
     }
 
+    // ── Public print API ──────────────────────────────────────────────
     fun printBill(
         context: Context,
         customer: Customer,
@@ -74,233 +91,373 @@ class PrinterManager {
         if (device == null) return error
         if (!printer.connect(device)) return "Printer connection failed"
 
-        val shopName    = AppPreferences.getShopName(context)
-        val balance     = finalAmount - paidAmount
-        val gstTotal    = items.sumOf { it.gstAmount }
-        val grandTotal  = itemsTotal + gstTotal
-        val prevBal     = finalAmount - grandTotal
-        val billNo      = "B${System.currentTimeMillis().toString().takeLast(6)}"
-        val isTamil     = AppLanguage.current == Language.TAMIL
+        val shopName   = AppPreferences.getShopName(context)
+        val balance    = finalAmount - paidAmount
+        val gstTotal   = items.sumOf { it.gstAmount }
+        val grandTotal = itemsTotal + gstTotal
+        val prevBal    = finalAmount - grandTotal
+        val billNo     = "B${System.currentTimeMillis().toString().takeLast(6)}"
+        val isTamil    = AppLanguage.current == Language.TAMIL
+        val style      = PrinterPreferences.getBillStyle(context)
 
-        printer.print(buildReceipt(
-            shopName    = shopName,
-            billNo      = billNo,
-            dateTime    = dateFormat.format(Date()),
-            customer    = customer,
-            items       = items,
-            itemsTotal  = itemsTotal,
-            gstTotal    = gstTotal,
-            grandTotal  = grandTotal,
-            prevBal     = prevBal,
-            totalPayable= finalAmount,
-            paidAmount  = paidAmount,
-            balance     = balance,
-            isTamil     = isTamil
-        ))
+        // ── Transliterate all user-supplied strings before building receipt ──
+        // This ensures Tamil product names, customer names, addresses etc.
+        // all print as readable Roman text instead of blank spaces.
+        val safeShopName = p(shopName)
+        val safeCustomer = customer.copy(
+            name    = p(customer.name),
+            phone   = customer.phone,           // phone is always ASCII
+            address = p(customer.address)
+        )
+        val safeItems = items.map { it.copy(name = p(it.name), unit = p(it.unit)) }
+
+        val receipt = when (style) {
+            BillStyle.MINIMAL      -> buildMinimalReceipt(safeShopName, billNo,
+                dateFormat.format(Date()), safeCustomer, safeItems,
+                itemsTotal, gstTotal, grandTotal, prevBal,
+                finalAmount, paidAmount, balance, isTamil)
+            BillStyle.PROFESSIONAL -> buildProfessionalReceipt(safeShopName, billNo,
+                dateFormat.format(Date()), safeCustomer, safeItems,
+                itemsTotal, gstTotal, grandTotal, prevBal,
+                finalAmount, paidAmount, balance, isTamil)
+            BillStyle.GST_DETAILED -> buildGstDetailedReceipt(safeShopName, billNo,
+                dateFormat.format(Date()), safeCustomer, safeItems,
+                itemsTotal, gstTotal, grandTotal, prevBal,
+                finalAmount, paidAmount, balance, isTamil)
+        }
+
+        printer.print(receipt)
         printer.disconnect()
-        return if (isTamil) "வெற்றிகரமாக அச்சிடப்பட்டது" else "Printed successfully"
+        return if (isTamil) "Printed successfully" else "Printed successfully"
     }
 
     fun printTestBill(context: Context): String {
         val (device, error) = resolveDevice(context)
         if (device == null) return error
         if (!printer.connect(device)) return "Printer connection failed"
-        val shopName = AppPreferences.getShopName(context)
+
+        val shopName = p(AppPreferences.getShopName(context))
         val isTamil  = AppLanguage.current == Language.TAMIL
-        printer.print(buildTestReceipt(shopName, dateFormat.format(Date()), isTamil))
+        val style    = PrinterPreferences.getBillStyle(context)
+
+        val testItems = listOf(
+            BillItem("1", "Rice (1kg)",         50.0, 40.0, "Kg",  2, 5.0),
+            BillItem("2", "Sunflower Oil (1L)", 120.0, 95.0, "L",   1, 5.0),
+            BillItem("3", "Sugar (1kg)",         45.0, 35.0, "Kg",  1, 0.0),
+            BillItem("4", "Tea Powder (250g)",   35.0, 28.0, "Pcs", 1, 0.0),
+            BillItem("5", "Bread",               25.0, 20.0, "Pcs", 1, 0.0)
+        )
+        val itemsTotal = testItems.sumOf { it.price * it.quantity }
+        val gstTotal   = testItems.sumOf { it.gstAmount }
+        val grandTotal = itemsTotal + gstTotal
+        val customer   = Customer("", "Test Customer", "9999999999",
+            "123, Main Street, Chennai", null, null)
+
+        val receipt = when (style) {
+            BillStyle.MINIMAL      -> buildMinimalReceipt(shopName, "T001",
+                dateFormat.format(Date()), customer, testItems,
+                itemsTotal, gstTotal, grandTotal, 0.0,
+                grandTotal, grandTotal, 0.0, isTamil)
+            BillStyle.PROFESSIONAL -> buildProfessionalReceipt(shopName, "T001",
+                dateFormat.format(Date()), customer, testItems,
+                itemsTotal, gstTotal, grandTotal, 0.0,
+                grandTotal, grandTotal, 0.0, isTamil)
+            BillStyle.GST_DETAILED -> buildGstDetailedReceipt(shopName, "T001",
+                dateFormat.format(Date()), customer, testItems,
+                itemsTotal, gstTotal, grandTotal, 0.0,
+                grandTotal, grandTotal, 0.0, isTamil)
+        }
+        printer.print(receipt)
         printer.disconnect()
-        return if (isTamil) "சோதனை அச்சு வெற்றி" else "Test print successful"
+        return "Test print successful"
     }
 
-    private fun buildReceipt(
-        shopName: String,
-        billNo: String,
-        dateTime: String,
-        customer: Customer,
-        items: List<BillItem>,
-        itemsTotal: Double,
-        gstTotal: Double,
-        grandTotal: Double,
-        prevBal: Double,
-        totalPayable: Double,
-        paidAmount: Double,
-        balance: Double,
+    // ═══════════════════════════════════════════════════════════════════
+    //  STYLE 1 — MINIMAL
+    // ═══════════════════════════════════════════════════════════════════
+    private fun buildMinimalReceipt(
+        shopName: String, billNo: String, dateTime: String, customer: Customer,
+        items: List<BillItem>, itemsTotal: Double, gstTotal: Double, grandTotal: Double,
+        prevBal: Double, totalPayable: Double, paidAmount: Double, balance: Double,
         isTamil: Boolean
-    ): String {
-        val sb = StringBuilder()
+    ): String = buildString {
 
-        // ── ESC/POS: initialize printer ───────────────────────────────
-        sb.append("\u001B\u0040")           // ESC @ — reset
-        sb.append("\u001B\u0061\u0001")     // ESC a 1 — center align
+        append(RESET)
+        append(ALIGN_CENTER)
+        append(SIZE_BIG_BOLD); append(shopName.uppercase()); append("\n")
+        append(SIZE_NORMAL)
+        append(ALIGN_LEFT)
+        append(dashDivider())
 
-        // ── Header ────────────────────────────────────────────────────
-        sb.append("\u001B\u0021\u0030")     // double width+height for shop name
-        sb.append(shopName.uppercase())
-        sb.append("\n")
-        sb.append("\u001B\u0021\u0000")     // normal size
+        append("Bill No     : $billNo\n")
+        append("Date & Time : $dateTime\n")
+        append(dashDivider())
 
-        if (isTamil) {
-            sb.append("வரி விலைப்பட்டியல்\n")
-        } else {
-            sb.append("TAX INVOICE\n")
-        }
+        append("To   : ${customer.name}\n")
+        if (customer.phone.isNotBlank()) append("Ph   : ${customer.phone}\n")
+        if (customer.address.isNotBlank())
+            wrapField("Addr : ", customer.address, 7).forEach { append(it) }
+        append(dashDivider())
 
-        sb.append("\u001B\u0061\u0000")     // left align
-        sb.append(divider())
+        append(SIZE_BOLD)
+        append(String.format("%-22s %5s %${W - 28}s\n", "ITEM", "QTY", "TOTAL"))
+        append(SIZE_NORMAL)
+        append(thinDotDivider())
 
-        // ── Bill info ─────────────────────────────────────────────────
-        if (isTamil) {
-            sb.append(twoCol("பில் எண்: $billNo", dateTime))
-        } else {
-            sb.append(twoCol("Bill No: $billNo", dateTime))
-        }
-        sb.append(divider())
-
-        // ── Customer ──────────────────────────────────────────────────
-        val toLabel = if (isTamil) "பெறுநர்" else "To"
-        sb.append("$toLabel: ${customer.name}\n")
-        if (customer.phone.isNotBlank()) {
-            val phLabel = if (isTamil) "தொ" else "Ph"
-            sb.append("$phLabel: ${customer.phone}\n")
-        }
-        if (customer.address.isNotBlank()) {
-            val addrLabel = if (isTamil) "முகவரி" else "Addr"
-            sb.append("$addrLabel: ${customer.address.take(W - addrLabel.length - 2)}\n")
-        }
-        sb.append(divider())
-
-        // ── Items header ──────────────────────────────────────────────
-        val itemH   = if (isTamil) "பொருள்" else "Item"
-        val qtyH    = if (isTamil) "அளவு" else "Qty"
-        val priceH  = if (isTamil) "விலை" else "Price"
-        val totalH  = if (isTamil) "மொத்தம்" else "Total"
-
-        // Layout: item(20) qty(6) price(10) total(12) for 48-char width
-        sb.append(String.format("%-20s %5s %9s %${W-36}s\n", itemH, qtyH, priceH, totalH))
-        sb.append(thinDivider())
-
-        // ── Items ─────────────────────────────────────────────────────
         items.forEach { item ->
             val lineTotal = item.price * item.quantity
-            // Item name (wrap if > 20 chars)
-            val nameParts = item.name.chunked(20)
-            sb.append(String.format("%-20s %5s %9s %${W-36}s\n",
-                nameParts[0],
-                "${item.quantity}${item.unit.take(3)}",
-                "Rs.${fmt(item.price)}",
-                "Rs.${fmt(lineTotal)}"
-            ))
-            // Continuation lines for long names
-            nameParts.drop(1).forEach { part ->
-                sb.append(String.format("%-20s\n", "  $part"))
+            val qtyStr    = "${item.quantity}${item.unit.take(3)}"
+            val totalStr  = fmt(lineTotal)
+
+            if (item.name.length <= 22) {
+                append(String.format("%-22s %5s %${W - 28}s\n", item.name, qtyStr, totalStr))
+            } else {
+                val chunks = item.name.chunked(22)
+                chunks.dropLast(1).forEach { append(String.format("%-22s\n", it)) }
+                append(String.format("%-22s %5s %${W - 28}s\n",
+                    chunks.last().take(22), qtyStr, totalStr))
             }
-            // GST line
+            append(FONT_B)
+            append("  @ Rs.${fmt(item.price)}/unit")
+            if (item.gstPercent > 0) append("  GST ${item.gstPercent.toInt()}%: Rs.${fmt(item.gstAmount)}")
+            append("\n")
+            append(FONT_A)
+        }
+        append(dashDivider())
+
+        append(amtRow("SUBTOTAL", fmt(itemsTotal)))
+        if (gstTotal > 0.001) append(amtRow("GST", fmt(gstTotal)))
+        append(SIZE_BOLD)
+        append(amtRow("TOTAL AMOUNT", fmt(grandTotal)))
+        append(SIZE_NORMAL)
+        append(dashDivider())
+
+        if (prevBal > 0.001) append(amtRow("Previous due", fmt(prevBal)))
+        append(amtRow("AMOUNT PAID", fmt(paidAmount)))
+        if (balance > 0.001) {
+            append(SIZE_BOLD); append(UNDERLINE_ON)
+            append(amtRow("BALANCE", fmt(balance)))
+            append(UNDERLINE_OFF); append(SIZE_NORMAL)
+        }
+        append(dashDivider())
+
+        append(ALIGN_CENTER)
+        if (balance <= 0.001) {
+            append(SIZE_BOLD); append("** PAID IN FULL **\n"); append(SIZE_NORMAL)
+        }
+        append(FONT_B)
+        append("--- Thank You! ---\n")
+        append("Visit Again!\n")
+        append(FONT_A)
+        append(ALIGN_LEFT)
+        append(dashDivider())
+        append("\n\n\n"); append(FULL_CUT)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  STYLE 2 — PROFESSIONAL
+    // ═══════════════════════════════════════════════════════════════════
+    private fun buildProfessionalReceipt(
+        shopName: String, billNo: String, dateTime: String, customer: Customer,
+        items: List<BillItem>, itemsTotal: Double, gstTotal: Double, grandTotal: Double,
+        prevBal: Double, totalPayable: Double, paidAmount: Double, balance: Double,
+        isTamil: Boolean
+    ): String = buildString {
+
+        append(RESET)
+        append(ALIGN_CENTER)
+        append(SIZE_BIG_BOLD); append(shopName.uppercase()); append("\n")
+        append(SIZE_BOLD);     append("BILL\n")
+        append(SIZE_NORMAL)
+        append(ALIGN_LEFT)
+        append(solidDivider())
+
+        append(twoCol("Bill No. : $billNo", dateTime))
+        append(solidDivider())
+
+        append(SIZE_BOLD); append("To : ${customer.name}\n"); append(SIZE_NORMAL)
+        if (customer.phone.isNotBlank()) append("Ph : ${customer.phone}\n")
+        if (customer.address.isNotBlank())
+            wrapField("Ad : ", customer.address, 5).forEach { append(it) }
+        append(solidDivider())
+
+        val c1 = 20; val c2 = 4; val c3 = 9; val c4 = W - c1 - c2 - c3 - 3
+        append(SIZE_BOLD)
+        append(String.format("%-${c1}s %${c2}s %${c3}s %${c4}s\n",
+            "ITEM", "QTY", "PRICE", "TOTAL"))
+        append(SIZE_NORMAL)
+        append(thinSolidDivider())
+
+        items.forEach { item ->
+            val lineTotal = item.price * item.quantity
+            val qtyStr    = "${item.quantity}${item.unit.take(3)}"
+            val priceStr  = "Rs.${fmt(item.price)}"
+            val totalStr  = "Rs.${fmt(lineTotal)}"
+
+            if (item.name.length <= c1) {
+                append(String.format("%-${c1}s %${c2}s %${c3}s %${c4}s\n",
+                    item.name, qtyStr, priceStr, totalStr))
+            } else {
+                val chunks = item.name.chunked(c1)
+                append(String.format("%-${c1}s %${c2}s %${c3}s %${c4}s\n",
+                    chunks[0], qtyStr, priceStr, totalStr))
+                chunks.drop(1).forEach { append(String.format("  %-${c1 - 2}s\n", it)) }
+            }
             if (item.gstPercent > 0) {
-                val gstLabel = if (isTamil) "  GST ${item.gstPercent.toInt()}%: Rs.${fmt(item.gstAmount)}"
-                else         "  GST ${item.gstPercent.toInt()}%: Rs.${fmt(item.gstAmount)}"
-                sb.append("$gstLabel\n")
+                append(FONT_B)
+                append("  GST ${item.gstPercent.toInt()}% : Rs.${fmt(item.gstAmount)}\n")
+                append(FONT_A)
             }
+            append(thinSolidDivider())
         }
-        sb.append(thinDivider())
 
-        // ── Totals ────────────────────────────────────────────────────
-        val itemsTotalLabel = if (isTamil) "பொருட்கள் மொத்தம்" else "Items total"
-        val gstTotalLabel   = if (isTamil) "GST மொத்தம்"       else "GST total"
-        val grandTotalLabel = if (isTamil) "மொத்த தொகை"        else "Grand total"
-        val prevBalLabel    = if (isTamil) "முந்தைய நிலுவை"   else "Previous due"
-        val payableLabel    = if (isTamil) "செலுத்த வேண்டியது" else "Total payable"
-        val paidLabel       = if (isTamil) "செலுத்தியது"       else "Paid"
-        val balLabel        = if (isTamil) "நிலுவை"            else "Balance due"
-        val paidFullLabel   = if (isTamil) "** முழுமையாக செலுத்தப்பட்டது **"
-        else         "** PAID IN FULL **"
-
-        sb.append(amtRow(itemsTotalLabel, "Rs.${fmt(itemsTotal)}"))
-        if (gstTotal > 0.001) {
-            sb.append(amtRow(gstTotalLabel, "Rs.${fmt(gstTotal)}"))
-        }
-        sb.append(amtRow(grandTotalLabel, "Rs.${fmt(grandTotal)}"))
+        append(amtRow("SUBTOTAL", fmt(itemsTotal)))
+        if (gstTotal > 0.001) append(amtRow("GST", fmt(gstTotal)))
+        append(SIZE_BOLD)
+        append(amtRow("TOTAL AMOUNT", fmt(grandTotal)))
+        append(SIZE_NORMAL)
+        append(solidDivider())
 
         if (prevBal > 0.001) {
-            sb.append(amtRow(prevBalLabel,  "Rs.${fmt(prevBal)}"))
-            sb.append(amtRow(payableLabel,  "Rs.${fmt(totalPayable)}"))
+            append(amtRow("Previous due", fmt(prevBal)))
+            append(SIZE_BOLD); append(amtRow("Total payable", fmt(totalPayable))); append(SIZE_NORMAL)
+            append(solidDivider())
         }
 
-        sb.append(divider())
-        sb.append(amtRow(paidLabel, "Rs.${fmt(paidAmount)}"))
-
+        append(amtRow("AMOUNT PAID", fmt(paidAmount)))
         if (balance > 0.001) {
-            sb.append(amtRow(balLabel, "Rs.${fmt(balance)}"))
-        } else {
-            sb.append("\u001B\u0061\u0001")  // center
-            sb.append("$paidFullLabel\n")
-            sb.append("\u001B\u0061\u0000")  // left
+            append(SIZE_BOLD); append(UNDERLINE_ON)
+            append(amtRow("BALANCE", fmt(balance)))
+            append(UNDERLINE_OFF); append(SIZE_NORMAL)
+        }
+        append(solidDivider())
+
+        append(ALIGN_CENTER)
+        if (balance <= 0.001) {
+            append(SIZE_BOLD); append("** PAID IN FULL **\n"); append(SIZE_NORMAL)
+        }
+        append("-- Thank You! --\n")
+        append("Visit Again!\n")
+        append(ALIGN_LEFT)
+        append(dashDivider())
+        append("\n\n\n"); append(FULL_CUT)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  STYLE 3 — GST DETAILED
+    // ═══════════════════════════════════════════════════════════════════
+    private fun buildGstDetailedReceipt(
+        shopName: String, billNo: String, dateTime: String, customer: Customer,
+        items: List<BillItem>, itemsTotal: Double, gstTotal: Double, grandTotal: Double,
+        prevBal: Double, totalPayable: Double, paidAmount: Double, balance: Double,
+        isTamil: Boolean
+    ): String = buildString {
+
+        append(RESET)
+        append(ALIGN_CENTER)
+        append(SIZE_BIG_BOLD); append(shopName.uppercase()); append("\n")
+        append(SIZE_BOLD);     append("TAX INVOICE\n")
+        append(SIZE_NORMAL)
+        append(ALIGN_LEFT)
+        append(solidDivider())
+
+        append(FONT_B)
+        append("Bill No   : $billNo\n")
+        append("Date/Time : $dateTime\n")
+        append(FONT_A)
+        append(solidDivider())
+
+        append(SIZE_BOLD); append("Billed To :\n"); append(SIZE_NORMAL)
+        append("  ${customer.name}\n")
+        if (customer.phone.isNotBlank()) append("  Ph : ${customer.phone}\n")
+        if (customer.address.isNotBlank())
+            customer.address.chunked(W - 4).forEach { append("  $it\n") }
+        append(solidDivider())
+
+        val sW = 2; val nW = 17; val qW = 4; val rW = 7; val aW = W - sW - nW - qW - rW - 4
+        append(SIZE_BOLD)
+        append(String.format("%${sW}s %-${nW}s %${qW}s %${rW}s %${aW}s\n",
+            "#", "ITEM", "QTY", "RATE", "AMT"))
+        append(SIZE_NORMAL)
+        append(thinSolidDivider())
+
+        items.forEachIndexed { idx, item ->
+            val lineAmt = item.price * item.quantity
+            val qtyStr  = "${item.quantity}${item.unit.take(3)}"
+
+            if (item.name.length <= nW) {
+                append(String.format("%${sW}d %-${nW}s %${qW}s %${rW}s %${aW}s\n",
+                    idx + 1, item.name, qtyStr, fmt(item.price), fmt(lineAmt)))
+            } else {
+                val chunks = item.name.chunked(nW)
+                append(String.format("%${sW}d %-${nW}s %${qW}s %${rW}s %${aW}s\n",
+                    idx + 1, chunks[0], qtyStr, fmt(item.price), fmt(lineAmt)))
+                chunks.drop(1).forEach { append(String.format("   %-${nW}s\n", it)) }
+            }
+            if (item.gstPercent > 0) {
+                val halfPct = item.gstPercent / 2
+                val halfAmt = item.gstAmount / 2
+                append(FONT_B)
+                append("   CGST ${fmt(halfPct)}%:${fmt(halfAmt)}  SGST ${fmt(halfPct)}%:${fmt(halfAmt)}\n")
+                append(FONT_A)
+            }
+        }
+        append(thinSolidDivider())
+
+        val cgst = gstTotal / 2; val sgst = gstTotal / 2
+        append(amtRow("Taxable amount", fmt(itemsTotal)))
+        if (gstTotal > 0.001) {
+            append(FONT_B)
+            append(amtRow("  CGST", fmt(cgst)))
+            append(amtRow("  SGST", fmt(sgst)))
+            append(FONT_A)
+            append(amtRow("Total GST", fmt(gstTotal)))
+        }
+        append(SIZE_BOLD); append(amtRow("GRAND TOTAL", fmt(grandTotal))); append(SIZE_NORMAL)
+        append(solidDivider())
+
+        if (prevBal > 0.001) {
+            append(amtRow("Previous due", fmt(prevBal)))
+            append(SIZE_BOLD); append(amtRow("Total payable", fmt(totalPayable))); append(SIZE_NORMAL)
+            append(solidDivider())
         }
 
-        sb.append(divider())
+        append(amtRow("AMOUNT PAID", fmt(paidAmount)))
+        if (balance > 0.001) {
+            append(SIZE_BOLD); append(UNDERLINE_ON)
+            append(amtRow("BALANCE DUE", fmt(balance)))
+            append(UNDERLINE_OFF); append(SIZE_NORMAL)
+        } else {
+            append(ALIGN_CENTER)
+            append(SIZE_BOLD); append("** PAID IN FULL **\n"); append(SIZE_NORMAL)
+            append(ALIGN_LEFT)
+        }
+        append(solidDivider())
 
-        // ── Footer ────────────────────────────────────────────────────
-        sb.append("\u001B\u0061\u0001")  // center
-        val thankYou    = if (isTamil) "நன்றி! மீண்டும் வாருங்கள்" else "Thank You! Visit Again"
-        val keepReceipt = if (isTamil) "இந்த ரசீதை பாதுகாக்கவும்" else "Keep this receipt safe"
-        sb.append("$thankYou\n")
-        sb.append("$keepReceipt\n")
-        sb.append("\u001B\u0061\u0000")  // left
-
-        // Feed and cut
-        sb.append("\n\n\n")
-        sb.append("\u001D\u0056\u0041\u0005")  // GS V A 5 — full cut with 5mm feed
-
-        return sb.toString()
+        append(ALIGN_CENTER)
+        append(SIZE_BOLD); append("Thank You! Visit Again\n"); append(SIZE_NORMAL)
+        append(FONT_B); append("Computer generated invoice\n"); append(FONT_A)
+        append(ALIGN_LEFT)
+        append(dashDivider())
+        append("\n\n\n"); append(FULL_CUT)
     }
 
-    private fun buildTestReceipt(shopName: String, dateTime: String, isTamil: Boolean): String {
-        val sb = StringBuilder()
-        sb.append("\u001B\u0040")
-        sb.append("\u001B\u0061\u0001")
-        sb.append("\u001B\u0021\u0030")
-        sb.append(shopName.uppercase()); sb.append("\n")
-        sb.append("\u001B\u0021\u0000")
-        if (isTamil) sb.append("வரி விலைப்பட்டியல்\n") else sb.append("TAX INVOICE\n")
-        sb.append("\u001B\u0061\u0000")
-        sb.append(divider())
-        sb.append(twoCol(if (isTamil) "பில் எண்: T001" else "Bill No: T001", dateTime))
-        sb.append(divider())
-        sb.append(if (isTamil) "பெறுநர்: TEST CUSTOMER\n" else "To: TEST CUSTOMER\n")
-        sb.append(if (isTamil) "தொ: 9999999999\n" else "Ph: 9999999999\n")
-        sb.append(divider())
-        sb.append(String.format("%-20s %5s %9s %12s\n",
-            if (isTamil) "பொருள்" else "Item",
-            if (isTamil) "அளவு" else "Qty",
-            if (isTamil) "விலை" else "Price",
-            if (isTamil) "மொத்தம்" else "Total"
-        ))
-        sb.append(thinDivider())
-        sb.append(String.format("%-20s %5s %9s %12s\n", "Rice", "2Kg", "Rs.50.00", "Rs.100.00"))
-        sb.append(String.format("%-20s %5s %9s %12s\n", "Oil", "1L", "Rs.100.00", "Rs.100.00"))
-        sb.append("  GST 5%: Rs.5.00\n")
-        sb.append(thinDivider())
-        sb.append(amtRow(if (isTamil) "பொருட்கள் மொத்தம்" else "Items total", "Rs.200.00"))
-        sb.append(amtRow("GST total", "Rs.5.00"))
-        sb.append(amtRow(if (isTamil) "மொத்த தொகை" else "Grand total", "Rs.205.00"))
-        sb.append(divider())
-        sb.append(amtRow(if (isTamil) "செலுத்தியது" else "Paid", "Rs.205.00"))
-        sb.append("\u001B\u0061\u0001")
-        sb.append(if (isTamil) "** முழுமையாக செலுத்தப்பட்டது **\n"
-        else         "** PAID IN FULL **\n")
-        sb.append("\u001B\u0061\u0000")
-        sb.append(divider())
-        sb.append("\u001B\u0061\u0001")
-        sb.append(if (isTamil) "நன்றி! மீண்டும் வாருங்கள்\n" else "Thank You! Visit Again\n")
-        sb.append("\u001B\u0061\u0000")
-        sb.append("\n\n\n")
-        sb.append("\u001D\u0056\u0041\u0005")
-        return sb.toString()
+    // ── Layout helpers ────────────────────────────────────────────────
+
+    private fun wrapField(prefix: String, value: String, prefixLen: Int): List<String> {
+        val maxW = W - prefixLen
+        if (value.length <= maxW) return listOf("$prefix$value\n")
+        val result = mutableListOf<String>()
+        val chunks = value.chunked(maxW)
+        result.add("$prefix${chunks[0]}\n")
+        chunks.drop(1).forEach { result.add(" ".repeat(prefixLen) + "$it\n") }
+        return result
     }
 
-    // ── Layout helpers — 48-char width ───────────────────────────────
-
-    private fun divider() = "-".repeat(W) + "\n"
-    private fun thinDivider() = "- ".repeat(W / 2) + "\n"
+    private fun solidDivider()     = "-".repeat(W) + "\n"
+    private fun thinSolidDivider() = "- ".repeat(W / 2) + "\n"
+    private fun dashDivider()      = "- ".repeat(W / 2) + "\n"
+    private fun thinDotDivider()   = ". ".repeat(W / 2) + "\n"
 
     private fun twoCol(left: String, right: String): String {
         val gap = W - left.length - right.length
