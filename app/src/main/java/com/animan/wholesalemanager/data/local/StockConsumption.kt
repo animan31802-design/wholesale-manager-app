@@ -5,7 +5,7 @@ data class ConsumptionItem(
     val name: String = "",
     val costPrice: Double = 0.0,
     val unit: String = "Piece",
-    val quantity: Int = 1
+    val quantity: Double = 1.0
 ) {
     val totalCost: Double get() = costPrice * quantity
 }

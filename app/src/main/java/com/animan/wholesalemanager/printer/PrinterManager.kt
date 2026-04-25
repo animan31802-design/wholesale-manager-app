@@ -141,11 +141,11 @@ class PrinterManager {
         val style    = PrinterPreferences.getBillStyle(context)
 
         val testItems = listOf(
-            BillItem("1", "Rice (1kg)",         50.0, 40.0, "Kg",  2, 5.0),
-            BillItem("2", "Sunflower Oil (1L)", 120.0, 95.0, "L",   1, 5.0),
-            BillItem("3", "Sugar (1kg)",         45.0, 35.0, "Kg",  1, 0.0),
-            BillItem("4", "Tea Powder (250g)",   35.0, 28.0, "Pcs", 1, 0.0),
-            BillItem("5", "Bread",               25.0, 20.0, "Pcs", 1, 0.0)
+            BillItem("1", "Rice (1kg)",         50.0, 40.0, "Kg",  2.0, 5.0),
+            BillItem("2", "Sunflower Oil (1L)", 120.0, 95.0, "L",   1.0, 5.0),
+            BillItem("3", "Sugar (1kg)",         45.0, 35.0, "Kg",  1.0, 0.0),
+            BillItem("4", "Tea Powder (250g)",   35.0, 28.0, "Pcs", 1.0, 0.0),
+            BillItem("5", "Bread",               25.0, 20.0, "Pcs", 1.0, 0.0)
         )
         val itemsTotal = testItems.sumOf { it.price * it.quantity }
         val gstTotal   = testItems.sumOf { it.gstAmount }

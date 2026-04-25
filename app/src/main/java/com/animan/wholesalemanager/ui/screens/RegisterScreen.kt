@@ -11,6 +11,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.animan.wholesalemanager.ui.components.AuthBackground
 import com.animan.wholesalemanager.viewmodel.AuthViewModel
 
 @Composable
@@ -26,12 +27,8 @@ fun RegisterScreen(
     var passwordVisible by remember { mutableStateOf(false) }
     var localError by remember { mutableStateOf<String?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
+    AuthBackground {
+
         Text("Create account", style = MaterialTheme.typography.headlineMedium)
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -40,8 +37,7 @@ fun RegisterScreen(
             value = email,
             onValueChange = { email = it; localError = null },
             label = { Text("Email") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -51,7 +47,6 @@ fun RegisterScreen(
             onValueChange = { password = it; localError = null },
             label = { Text("Password") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
             visualTransformation = if (passwordVisible) VisualTransformation.None
             else PasswordVisualTransformation(),
             trailingIcon = {
@@ -72,7 +67,6 @@ fun RegisterScreen(
             onValueChange = { confirmPassword = it; localError = null },
             label = { Text("Confirm password") },
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
             visualTransformation = PasswordVisualTransformation()
         )
 
@@ -98,11 +92,13 @@ fun RegisterScreen(
                     onRegisterSuccess()
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !viewModel.isLoading.value
+            modifier = Modifier.fillMaxWidth()
         ) {
             if (viewModel.isLoading.value) {
-                CircularProgressIndicator(strokeWidth = 2.dp)
+                CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(20.dp)
+                )
             } else {
                 Text("Register")
             }

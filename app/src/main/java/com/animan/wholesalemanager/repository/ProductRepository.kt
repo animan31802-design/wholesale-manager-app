@@ -34,12 +34,12 @@ class ProductRepository(private val context: Context) {
         if (db.deleteProduct(id)) onSuccess() else onError("Failed to delete product")
     }
 
-    fun restockProduct(productId: String, qty: Int, onSuccess: () -> Unit, onError: (String) -> Unit) {
+    fun restockProduct(productId: String, qty: Double, onSuccess: () -> Unit, onError: (String) -> Unit) {
         try { db.incrementProductStock(productId, qty); onSuccess() }
         catch (e: Exception) { onError(e.message ?: "Restock failed") }
     }
 
-    fun consumeStock(productId: String, qty: Int, onSuccess: () -> Unit, onError: (String) -> Unit) {
+    fun consumeStock(productId: String, qty: Double, onSuccess: () -> Unit, onError: (String) -> Unit) {
         try { db.decrementProductStock(productId, qty); onSuccess() }
         catch (e: Exception) { onError(e.message ?: "Consumption failed") }
     }

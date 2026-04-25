@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,9 +44,8 @@ fun AddProductScreen(
     var minStockLevel by remember { mutableStateOf("5") }
     var barcode       by remember { mutableStateOf("") }
     var gstPercent    by remember { mutableStateOf(0.0) }
+    var allowPartial  by remember { mutableStateOf(false) }   // ← NEW
     var loaded        by remember { mutableStateOf(false) }
-
-    // FIX: store the actual product being edited so we don't lose the id
     var editingProduct by remember { mutableStateOf<Product?>(null) }
 
     val isEditMode = productId != null
@@ -60,15 +60,15 @@ fun AddProductScreen(
             viewModel.productList.value.find { it.id == productId }?.let { p ->
                 editingProduct = p
                 name          = p.name
-                // Show price as 2dp
                 sellingPrice  = p.sellingPrice.formatPrice()
                 costPrice     = p.costPrice.formatPrice()
-                quantity      = p.quantity.toString()
+                quantity      = formatQty(p.quantity)          // ← Double format
                 unit          = p.unit
                 category      = p.category
-                minStockLevel = p.minStockLevel.toString()
+                minStockLevel = formatQty(p.minStockLevel)     // ← Double format
                 barcode       = p.barcode
                 gstPercent    = p.gstPercent
+                allowPartial  = p.allowPartial                 // ← NEW
                 loaded        = true
             }
         }
@@ -101,7 +101,6 @@ fun AddProductScreen(
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                // Selling price — validates 2dp as user types, rounds on focus loss
                 OutlinedTextField(
                     value = sellingPrice,
                     onValueChange = { if (isValidPriceInput(it)) sellingPrice = it },
@@ -131,23 +130,89 @@ fun AddProductScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                // ── Quantity field — decimal if allowPartial, integer otherwise ──
                 OutlinedTextField(
-                    value = quantity, onValueChange = { quantity = it },
-                    label = { Text("${S.quantity} *") }, modifier = Modifier.weight(1f),
-                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    value = quantity,
+                    onValueChange = { v ->
+                        if (allowPartial) {
+                            if (isValidPriceInput(v)) quantity = v
+                        } else {
+                            if (v.all { it.isDigit() }) quantity = v
+                        }
+                    },
+                    label = { Text("${S.quantity} *") },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (allowPartial) KeyboardType.Decimal
+                        else KeyboardType.Number
+                    )
                 )
                 OutlinedTextField(
-                    value = minStockLevel, onValueChange = { minStockLevel = it },
-                    label = { Text(S.minStock) }, modifier = Modifier.weight(1f),
-                    singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    value = minStockLevel,
+                    onValueChange = { v ->
+                        if (allowPartial) {
+                            if (isValidPriceInput(v)) minStockLevel = v
+                        } else {
+                            if (v.all { it.isDigit() }) minStockLevel = v
+                        }
+                    },
+                    label = { Text(S.minStock) },
+                    modifier = Modifier.weight(1f),
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = if (allowPartial) KeyboardType.Decimal
+                        else KeyboardType.Number
+                    )
                 )
+            }
+
+            // ── Sell in fractions toggle ──────────────────────────────
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text("Sell in fractions",
+                            style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            if (allowPartial) "e.g. 0.5 Kg, 0.250 Kg"
+                            else "Whole units only (1, 2, 3…)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = allowPartial,
+                        onCheckedChange = {
+                            allowPartial = it
+                            // Reset qty fields to avoid leftover decimals
+                            // when switching from partial → whole
+                            if (!it) {
+                                quantity = quantity.toDoubleOrNull()
+                                    ?.toInt()?.toString() ?: quantity
+                                minStockLevel = minStockLevel.toDoubleOrNull()
+                                    ?.toInt()?.toString() ?: minStockLevel
+                            }
+                        }
+                    )
+                }
             }
 
             Text("${S.unit} *", style = MaterialTheme.typography.labelMedium)
             Row(modifier = Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 UNIT_OPTIONS.forEach { opt ->
-                    FilterChip(selected = unit == opt, onClick = { unit = opt }, label = { Text(opt) })
+                    FilterChip(selected = unit == opt, onClick = { unit = opt },
+                        label = { Text(opt) })
                 }
             }
 
@@ -162,7 +227,8 @@ fun AddProductScreen(
 
             OutlinedTextField(
                 value = category, onValueChange = { category = it },
-                label = { Text(S.category) }, modifier = Modifier.fillMaxWidth(), singleLine = true
+                label = { Text(S.category) }, modifier = Modifier.fillMaxWidth(),
+                singleLine = true
             )
 
             if (viewModel.categoryList.value.isNotEmpty()) {
@@ -177,7 +243,8 @@ fun AddProductScreen(
             OutlinedTextField(
                 value = barcode, onValueChange = { barcode = it },
                 label = { Text(S.barcode) }, modifier = Modifier.fillMaxWidth(),
-                singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
             )
 
             viewModel.errorMessage.value?.let {
@@ -186,33 +253,35 @@ fun AddProductScreen(
 
             Button(
                 onClick = {
-                    val sp = sellingPrice.toDoubleOrNull()?.round2dp()
-                    val cp = costPrice.toDoubleOrNull()?.round2dp() ?: 0.0
-                    val qty = quantity.toIntOrNull() ?: 0
-                    val minStock = minStockLevel.toIntOrNull() ?: 5
+                    val sp  = sellingPrice.toDoubleOrNull()?.round2dp()
+                    val cp  = costPrice.toDoubleOrNull()?.round2dp() ?: 0.0
+                    val qty = quantity.toDoubleOrNull() ?: 0.0           // ← Double
+                    val minStock = minStockLevel.toDoubleOrNull() ?: 5.0 // ← Double
 
                     if (name.isBlank()) { viewModel.errorMessage.value = S.nameEmpty; return@Button }
                     if (sp == null || sp < 0) { viewModel.errorMessage.value = S.invalidPrice; return@Button }
 
                     val product = if (isEditMode) {
-                        // FIX: use the full editing product to preserve the id
                         (editingProduct ?: return@Button).copy(
                             name = name.trim(), sellingPrice = sp, costPrice = cp,
                             quantity = qty, unit = unit, category = category.trim(),
-                            minStockLevel = minStock, barcode = barcode.trim(), gstPercent = gstPercent
+                            minStockLevel = minStock, barcode = barcode.trim(),
+                            gstPercent = gstPercent, allowPartial = allowPartial  // ← NEW
                         )
                     } else {
                         Product(
                             name = name.trim(), sellingPrice = sp, costPrice = cp,
                             quantity = qty, unit = unit, category = category.trim(),
-                            minStockLevel = minStock, barcode = barcode.trim(), gstPercent = gstPercent
+                            minStockLevel = minStock, barcode = barcode.trim(),
+                            gstPercent = gstPercent, allowPartial = allowPartial  // ← NEW
                         )
                     }
 
                     if (isEditMode) viewModel.updateProduct(product) { navController.popBackStack() }
                     else viewModel.addProduct(product) { navController.popBackStack() }
                 },
-                modifier = Modifier.fillMaxWidth(), enabled = !viewModel.isLoading.value
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !viewModel.isLoading.value
             ) {
                 if (viewModel.isLoading.value) CircularProgressIndicator(strokeWidth = 2.dp)
                 else Text(if (isEditMode) S.update else S.save)
@@ -222,3 +291,9 @@ fun AddProductScreen(
         }
     }
 }
+
+// ── Qty display helper ────────────────────────────────────────────────
+// Shows "2" instead of "2.0", "0.5" instead of "0.500000"
+fun formatQty(v: Double): String =
+    if (v % 1.0 == 0.0) v.toInt().toString()
+    else v.toBigDecimal().stripTrailingZeros().toPlainString()

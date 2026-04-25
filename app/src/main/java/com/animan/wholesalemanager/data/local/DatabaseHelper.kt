@@ -10,7 +10,7 @@ class DatabaseHelper(context: Context) :
 
     companion object {
         const val DATABASE_NAME    = "wholesale_manager.db"
-        const val DATABASE_VERSION = 5  // bumped: removes FTS table
+        const val DATABASE_VERSION = 6  // bumped: Partial Qty selling
 
         const val TABLE_CUSTOMERS    = "customers"
         const val TABLE_PRODUCTS     = "products"
@@ -41,6 +41,7 @@ class DatabaseHelper(context: Context) :
         const val COL_PRODUCT_MIN_STOCK     = "min_stock_level"
         const val COL_PRODUCT_BARCODE       = "barcode"
         const val COL_PRODUCT_GST           = "gst_percent"
+        const val COL_PRODUCT_ALLOW_PARTIAL = "allow_partial"
 
         // bills
         const val COL_BILL_ID            = "id"
@@ -106,6 +107,15 @@ class DatabaseHelper(context: Context) :
             // Drop the FTS table — it was causing all product add/update failures
             runCatching { db.execSQL("DROP TABLE IF EXISTS products_fts") }
         }
+        if (oldVersion < 6) {
+            // products: quantity & min_stock → REAL, add allow_partial
+            runCatching {
+                db.execSQL("ALTER TABLE $TABLE_PRODUCTS ADD COLUMN allow_partial INTEGER DEFAULT 0")
+            }
+            // bill_items: quantity → REAL (SQLite stores as REAL when value has decimal)
+            // No ALTER needed — SQLite REAL column accepts both int and decimal reads/writes
+            // We just change how we read/write in Kotlin (getDouble instead of getInt)
+        }
     }
 
     private fun createAllTables(db: SQLiteDatabase) {
@@ -125,12 +135,13 @@ class DatabaseHelper(context: Context) :
             $COL_PRODUCT_NAME          TEXT NOT NULL,
             $COL_PRODUCT_SELLING_PRICE REAL DEFAULT 0,
             $COL_PRODUCT_COST_PRICE    REAL DEFAULT 0,
-            $COL_PRODUCT_QUANTITY      INTEGER DEFAULT 0,
+            $COL_PRODUCT_QUANTITY      REAL DEFAULT 0,
             $COL_PRODUCT_UNIT          TEXT DEFAULT 'Piece',
             $COL_PRODUCT_CATEGORY      TEXT DEFAULT '',
-            $COL_PRODUCT_MIN_STOCK     INTEGER DEFAULT 5,
+            $COL_PRODUCT_MIN_STOCK     REAL DEFAULT 5,
             $COL_PRODUCT_BARCODE       TEXT DEFAULT '',
-            $COL_PRODUCT_GST           REAL DEFAULT 0)""")
+            $COL_PRODUCT_GST           REAL DEFAULT 0,
+            $COL_PRODUCT_ALLOW_PARTIAL INTEGER DEFAULT 0)""")
 
         db.execSQL("""CREATE TABLE $TABLE_BILLS (
             $COL_BILL_ID            TEXT PRIMARY KEY,
@@ -154,7 +165,7 @@ class DatabaseHelper(context: Context) :
             $COL_BI_PRICE      REAL NOT NULL,
             $COL_BI_COST_PRICE REAL DEFAULT 0,
             $COL_BI_UNIT       TEXT DEFAULT 'Piece',
-            $COL_BI_QUANTITY   INTEGER NOT NULL,
+            $COL_BI_QUANTITY   REAL NOT NULL,
             $COL_BI_GST        REAL DEFAULT 0,
             FOREIGN KEY($COL_BI_BILL_ID) REFERENCES $TABLE_BILLS($COL_BILL_ID))""")
 
@@ -297,13 +308,13 @@ class DatabaseHelper(context: Context) :
     fun deleteProduct(id: String): Boolean =
         writableDatabase.delete(TABLE_PRODUCTS, "$COL_PRODUCT_ID = ?", arrayOf(id)) > 0
 
-    fun decrementProductStock(productId: String, qty: Int) {
+    fun decrementProductStock(productId: String, qty: Double) {
         writableDatabase.execSQL(
             "UPDATE $TABLE_PRODUCTS SET $COL_PRODUCT_QUANTITY = $COL_PRODUCT_QUANTITY - ? " +
                     "WHERE $COL_PRODUCT_ID = ?", arrayOf(qty, productId))
     }
 
-    fun incrementProductStock(productId: String, qty: Int) {
+    fun incrementProductStock(productId: String, qty: Double) {
         writableDatabase.execSQL(
             "UPDATE $TABLE_PRODUCTS SET $COL_PRODUCT_QUANTITY = $COL_PRODUCT_QUANTITY + ? " +
                     "WHERE $COL_PRODUCT_ID = ?", arrayOf(qty, productId))
@@ -391,7 +402,7 @@ class DatabaseHelper(context: Context) :
                 price      = c.getDouble(c.getColumnIndexOrThrow(COL_BI_PRICE)),
                 costPrice  = c.getDouble(c.getColumnIndexOrThrow(COL_BI_COST_PRICE)),
                 unit       = c.getString(c.getColumnIndexOrThrow(COL_BI_UNIT)),
-                quantity   = c.getInt(c.getColumnIndexOrThrow(COL_BI_QUANTITY)),
+                quantity   = c.getDouble(c.getColumnIndexOrThrow(COL_BI_QUANTITY)),
                 gstPercent = c.getDouble(c.getColumnIndexOrThrow(COL_BI_GST))
             ))
         }
@@ -468,16 +479,17 @@ class DatabaseHelper(context: Context) :
     )
 
     private fun android.database.Cursor.toProduct() = Product(
-        id           = getString(getColumnIndexOrThrow(COL_PRODUCT_ID)),
-        name         = getString(getColumnIndexOrThrow(COL_PRODUCT_NAME)),
-        sellingPrice = getDouble(getColumnIndexOrThrow(COL_PRODUCT_SELLING_PRICE)),
-        costPrice    = getDouble(getColumnIndexOrThrow(COL_PRODUCT_COST_PRICE)),
-        quantity     = getInt(getColumnIndexOrThrow(COL_PRODUCT_QUANTITY)),
-        unit         = getString(getColumnIndexOrThrow(COL_PRODUCT_UNIT)) ?: "Piece",
-        category     = getString(getColumnIndexOrThrow(COL_PRODUCT_CATEGORY)) ?: "",
-        minStockLevel= getInt(getColumnIndexOrThrow(COL_PRODUCT_MIN_STOCK)),
-        barcode      = getString(getColumnIndexOrThrow(COL_PRODUCT_BARCODE)) ?: "",
-        gstPercent   = getDouble(getColumnIndexOrThrow(COL_PRODUCT_GST))
+        id            = getString(getColumnIndexOrThrow(COL_PRODUCT_ID)),
+        name          = getString(getColumnIndexOrThrow(COL_PRODUCT_NAME)),
+        sellingPrice  = getDouble(getColumnIndexOrThrow(COL_PRODUCT_SELLING_PRICE)),
+        costPrice     = getDouble(getColumnIndexOrThrow(COL_PRODUCT_COST_PRICE)),
+        quantity      = getDouble(getColumnIndexOrThrow(COL_PRODUCT_QUANTITY)),  // ← getInt → getDouble
+        unit          = getString(getColumnIndexOrThrow(COL_PRODUCT_UNIT)) ?: "Piece",
+        category      = getString(getColumnIndexOrThrow(COL_PRODUCT_CATEGORY)) ?: "",
+        minStockLevel = getDouble(getColumnIndexOrThrow(COL_PRODUCT_MIN_STOCK)), // ← getInt → getDouble
+        barcode       = getString(getColumnIndexOrThrow(COL_PRODUCT_BARCODE)) ?: "",
+        gstPercent    = getDouble(getColumnIndexOrThrow(COL_PRODUCT_GST)),
+        allowPartial  = getInt(getColumnIndexOrThrow(COL_PRODUCT_ALLOW_PARTIAL)) == 1  // ← NEW
     )
 
     private fun android.database.Cursor.toExpense() = Expense(
@@ -503,17 +515,25 @@ class DatabaseHelper(context: Context) :
     private fun Product.toCV() = ContentValues().apply {
         put(COL_PRODUCT_ID, id); put(COL_PRODUCT_NAME, name)
         put(COL_PRODUCT_SELLING_PRICE, sellingPrice); put(COL_PRODUCT_COST_PRICE, costPrice)
-        put(COL_PRODUCT_QUANTITY, quantity); put(COL_PRODUCT_UNIT, unit)
-        put(COL_PRODUCT_CATEGORY, category); put(COL_PRODUCT_MIN_STOCK, minStockLevel)
-        put(COL_PRODUCT_BARCODE, barcode); put(COL_PRODUCT_GST, gstPercent)
+        put(COL_PRODUCT_QUANTITY, quantity)          // Double — SQLite handles it
+        put(COL_PRODUCT_UNIT, unit)
+        put(COL_PRODUCT_CATEGORY, category)
+        put(COL_PRODUCT_MIN_STOCK, minStockLevel)    // Double
+        put(COL_PRODUCT_BARCODE, barcode)
+        put(COL_PRODUCT_GST, gstPercent)
+        put(COL_PRODUCT_ALLOW_PARTIAL, if (allowPartial) 1 else 0)  // ← NEW
     }
 
     // Used for UPDATE — excludes id (never update primary key)
     private fun Product.toUpdateCV() = ContentValues().apply {
         put(COL_PRODUCT_NAME, name)
         put(COL_PRODUCT_SELLING_PRICE, sellingPrice); put(COL_PRODUCT_COST_PRICE, costPrice)
-        put(COL_PRODUCT_QUANTITY, quantity); put(COL_PRODUCT_UNIT, unit)
-        put(COL_PRODUCT_CATEGORY, category); put(COL_PRODUCT_MIN_STOCK, minStockLevel)
-        put(COL_PRODUCT_BARCODE, barcode); put(COL_PRODUCT_GST, gstPercent)
+        put(COL_PRODUCT_QUANTITY, quantity)
+        put(COL_PRODUCT_UNIT, unit)
+        put(COL_PRODUCT_CATEGORY, category)
+        put(COL_PRODUCT_MIN_STOCK, minStockLevel)
+        put(COL_PRODUCT_BARCODE, barcode)
+        put(COL_PRODUCT_GST, gstPercent)
+        put(COL_PRODUCT_ALLOW_PARTIAL, if (allowPartial) 1 else 0)  // ← NEW
     }
 }

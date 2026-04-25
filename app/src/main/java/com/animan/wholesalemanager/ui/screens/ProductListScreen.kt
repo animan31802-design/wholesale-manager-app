@@ -14,12 +14,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.animan.wholesalemanager.data.local.Product
 import com.animan.wholesalemanager.utils.PriceUtils.formatPrice
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
+import androidx.compose.foundation.text.KeyboardOptions
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,7 +32,7 @@ fun ProductListScreen(navController: NavController) {
     var deleteTargetId   by remember { mutableStateOf<String?>(null) }
     var deleteTargetName by remember { mutableStateOf("") }
     var restockTarget    by remember { mutableStateOf<Product?>(null) }
-    var restockQty       by remember { mutableStateOf("") }
+    var restockQty       by remember { mutableStateOf("") }  // stays String — parsed on confirm
 
     LaunchedEffect(Unit) {
         viewModel.fetchProducts()
@@ -60,7 +62,6 @@ fun ProductListScreen(navController: NavController) {
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
 
-            // ── Search bar — same pill shape as CustomerListScreen ────
             OutlinedTextField(
                 value         = searchQuery,
                 onValueChange = { searchQuery = it },
@@ -82,7 +83,6 @@ fun ProductListScreen(navController: NavController) {
             if (viewModel.isLoading.value)
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
-            // ── Empty state ───────────────────────────────────────────
             if (viewModel.productList.value.isEmpty() && !viewModel.isLoading.value) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(
@@ -119,36 +119,27 @@ fun ProductListScreen(navController: NavController) {
                             )
                         ) {
                             Column {
-                                // ── Coloured top strip ────────────────
-                                // Red when low stock, primary colour otherwise
-                                // Mirrors the customer card's due/cleared strip
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(4.dp)
                                         .background(
-                                            if (isLowStock)
-                                                MaterialTheme.colorScheme.error
-                                            else
-                                                MaterialTheme.colorScheme.primary
+                                            if (isLowStock) MaterialTheme.colorScheme.error
+                                            else MaterialTheme.colorScheme.primary
                                         )
                                 )
 
                                 Column(modifier = Modifier.padding(14.dp)) {
 
-                                    // ── Avatar + name + pricing ───────
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                                     ) {
-                                        // Avatar circle with first letter — same as customer card
                                         Box(
                                             modifier = Modifier
                                                 .size(44.dp)
                                                 .clip(CircleShape)
-                                                .background(
-                                                    MaterialTheme.colorScheme.primaryContainer
-                                                ),
+                                                .background(MaterialTheme.colorScheme.primaryContainer),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
@@ -193,27 +184,47 @@ fun ProductListScreen(navController: NavController) {
                                             }
                                         }
 
-                                        // GST badge — top-right, only when set
-                                        if (product.gstPercent > 0) {
-                                            Surface(
-                                                shape = RoundedCornerShape(6.dp),
-                                                color = MaterialTheme.colorScheme.tertiaryContainer
-                                            ) {
-                                                Text(
-                                                    "GST ${product.gstPercent.toInt()}%",
-                                                    modifier = Modifier.padding(
-                                                        horizontal = 7.dp, vertical = 3.dp),
-                                                    style  = MaterialTheme.typography.labelSmall,
-                                                    color  = MaterialTheme.colorScheme.onTertiaryContainer,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
+                                        // ── GST badge + partial badge ─────────────────
+                                        Column(
+                                            horizontalAlignment = Alignment.End,
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            if (product.gstPercent > 0) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.tertiaryContainer
+                                                ) {
+                                                    Text(
+                                                        "GST ${product.gstPercent.toInt()}%",
+                                                        modifier = Modifier.padding(
+                                                            horizontal = 7.dp, vertical = 3.dp),
+                                                        style      = MaterialTheme.typography.labelSmall,
+                                                        color      = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
+                                            }
+                                            // ← NEW: show partial badge
+                                            if (product.allowPartial) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = MaterialTheme.colorScheme.secondaryContainer
+                                                ) {
+                                                    Text(
+                                                        "Fractions",
+                                                        modifier = Modifier.padding(
+                                                            horizontal = 7.dp, vertical = 3.dp),
+                                                        style      = MaterialTheme.typography.labelSmall,
+                                                        color      = MaterialTheme.colorScheme.onSecondaryContainer,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                }
                                             }
                                         }
                                     }
 
                                     Spacer(Modifier.height(10.dp))
 
-                                    // ── Stock badge — mirrors balance badge ───
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -242,10 +253,11 @@ fun ProductListScreen(navController: NavController) {
                                                     else MaterialTheme.colorScheme.primary
                                                 )
                                                 Text(
+                                                    // ← formatQty for Double stock display
                                                     if (isLowStock)
-                                                        "Low: ${product.quantity} ${product.unit}"
+                                                        "Low: ${formatQty(product.quantity)} ${product.unit}"
                                                     else
-                                                        "Stock: ${product.quantity} ${product.unit}",
+                                                        "Stock: ${formatQty(product.quantity)} ${product.unit}",
                                                     style      = MaterialTheme.typography.labelMedium,
                                                     fontWeight = FontWeight.SemiBold,
                                                     color      = if (isLowStock)
@@ -255,9 +267,9 @@ fun ProductListScreen(navController: NavController) {
                                             }
                                         }
 
-                                        // Min stock level hint
                                         Text(
-                                            "Min: ${product.minStockLevel} ${product.unit}",
+                                            // ← formatQty for Double min stock display
+                                            "Min: ${formatQty(product.minStockLevel)} ${product.unit}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -270,7 +282,6 @@ fun ProductListScreen(navController: NavController) {
                                     )
                                     Spacer(Modifier.height(8.dp))
 
-                                    // ── Action row — Edit / Restock / Delete only ──
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceEvenly
@@ -346,29 +357,48 @@ fun ProductListScreen(navController: NavController) {
                     Text(product.name,
                         style      = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold)
-                    Text("Current: ${product.quantity} ${product.unit}",
+                    Text(
+                        // ← formatQty for Double
+                        "Current: ${formatQty(product.quantity)} ${product.unit}",
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(Modifier.height(4.dp))
                     OutlinedTextField(
                         value         = restockQty,
-                        onValueChange = { restockQty = it.filter { c -> c.isDigit() } },
-                        label         = { Text("Quantity to add") },
-                        singleLine    = true,
-                        modifier      = Modifier.fillMaxWidth()
+                        onValueChange = { v ->
+                            // ← decimal allowed for partial products, digits only otherwise
+                            if (product.allowPartial) {
+                                if (v.isEmpty() || v.matches(Regex("^\\d*\\.?\\d*$")))
+                                    restockQty = v
+                            } else {
+                                if (v.all { it.isDigit() }) restockQty = v
+                            }
+                        },
+                        label      = { Text("Quantity to add") },
+                        singleLine = true,
+                        suffix     = { Text(product.unit) },
+                        modifier   = Modifier.fillMaxWidth(),
+                        // ← decimal keyboard for partial products
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = if (product.allowPartial) KeyboardType.Decimal
+                            else KeyboardType.Number
+                        )
                     )
                 }
             },
             confirmButton = {
                 Button(
-                    onClick  = {
-                        val qty = restockQty.toIntOrNull() ?: 0
-                        if (qty > 0) {
+                    onClick = {
+                        // ← parse as Double
+                        val qty = restockQty.toDoubleOrNull() ?: 0.0
+                        if (qty > 0.0) {
                             viewModel.restockProduct(product.id, qty) {}
                             restockTarget = null
                         }
                     },
-                    enabled = restockQty.toIntOrNull()?.let { it > 0 } == true
+                    // ← validate as Double
+                    enabled = restockQty.toDoubleOrNull()?.let { it > 0.0 } == true
                 ) { Text("Add stock") }
             },
             dismissButton = {

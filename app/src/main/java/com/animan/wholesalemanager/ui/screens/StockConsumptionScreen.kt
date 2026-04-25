@@ -125,7 +125,7 @@ fun StockConsumptionScreen(navController: NavController) {
                                 Row(verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     FilledIconButton(onClick = {
-                                        val cur = consumedItems[item.productId]?.quantity ?: 1
+                                        val cur = consumedItems[item.productId]?.quantity ?: 1.0
                                         if (cur <= 1) consumedItems.remove(item.productId)
                                         else consumedItems[item.productId] = item.copy(quantity = cur - 1)
                                     }, modifier = Modifier.size(28.dp)) { Text("-") }
@@ -189,7 +189,7 @@ fun StockConsumptionScreen(navController: NavController) {
                                 name      = product.name,
                                 costPrice = product.costPrice,
                                 unit      = product.unit,
-                                quantity  = 1
+                                quantity  = 1.0
                             )
                         }, modifier = Modifier.height(32.dp),
                             contentPadding = PaddingValues(horizontal = 12.dp)) {

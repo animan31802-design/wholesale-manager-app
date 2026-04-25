@@ -5,10 +5,11 @@ data class Product(
     val name: String = "",
     val sellingPrice: Double = 0.0,
     val costPrice: Double = 0.0,
-    val quantity: Int = 0,
-    val unit: String = "Piece",          // Kg, Liter, Piece, Box, Packet, etc.
+    val quantity: Double = 0.0,        // ← Int → Double
+    val unit: String = "Piece",
     val category: String = "",
-    val minStockLevel: Int = 5,
-    val barcode: String = "",             // optional, empty if not set
-    val gstPercent: Double = 0.0      // 0 = no GST, 5 / 12 / 18 / 28 are common values
+    val minStockLevel: Double = 5.0,   // ← Int → Double
+    val barcode: String = "",
+    val gstPercent: Double = 0.0,
+    val allowPartial: Boolean = false  // ← NEW
 )

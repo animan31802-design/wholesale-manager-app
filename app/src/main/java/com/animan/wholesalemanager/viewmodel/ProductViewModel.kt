@@ -62,8 +62,8 @@ class ProductViewModel(app: Application) : AndroidViewModel(app) {
         )
     }
 
-    fun restockProduct(productId: String, qty: Int, onSuccess: () -> Unit) {
-        if (qty == 0) return
+    fun restockProduct(productId: String, qty: Double, onSuccess: () -> Unit) {
+        if (qty == 0.0) return
         if (qty > 0) {
             repository.restockProduct(productId, qty,
                 onSuccess = { fetchProducts(); onSuccess() },
