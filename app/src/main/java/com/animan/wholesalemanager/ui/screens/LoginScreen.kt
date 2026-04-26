@@ -1,7 +1,5 @@
 package com.animan.wholesalemanager.ui.screens
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
@@ -9,16 +7,13 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.animan.wholesalemanager.viewmodel.AuthViewModel
-import com.animan.wholesalemanager.R
 import com.animan.wholesalemanager.ui.components.AuthBackground
+import com.animan.wholesalemanager.viewmodel.AuthViewModel
 
 @Composable
 fun LoginScreen(
@@ -26,9 +21,10 @@ fun LoginScreen(
     onNavigateToRegister: () -> Unit = {}
 ) {
     val viewModel: AuthViewModel = viewModel()
+    val context = LocalContext.current
 
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var email           by remember { mutableStateOf("") }
+    var password        by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
 
     AuthBackground {
@@ -38,24 +34,24 @@ fun LoginScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
-            value = email,
-            onValueChange = { email = it },
-            label = { Text("Email") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            value         = email,
+            onValueChange = { email = it; viewModel.errorMessage.value = null },
+            label         = { Text("Email") },
+            modifier      = Modifier.fillMaxWidth(),
+            singleLine    = true
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            label = { Text("Password") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            value               = password,
+            onValueChange       = { password = it; viewModel.errorMessage.value = null },
+            label               = { Text("Password") },
+            modifier            = Modifier.fillMaxWidth(),
+            singleLine          = true,
             visualTransformation = if (passwordVisible) VisualTransformation.None
             else PasswordVisualTransformation(),
-            trailingIcon = {
+            trailingIcon        = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(
                         if (passwordVisible) Icons.Filled.VisibilityOff
@@ -74,16 +70,28 @@ fun LoginScreen(
         }
 
         Button(
-            onClick = { viewModel.login(email.trim(), password.trim()) { onLoginSuccess() } },
-            modifier = Modifier.fillMaxWidth()
+            onClick  = {
+                viewModel.login(email.trim(), password.trim(), context) {
+                    onLoginSuccess()
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled  = !viewModel.isLoading.value
         ) {
-            Text("Login")
+            if (viewModel.isLoading.value) {
+                CircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier    = Modifier.size(20.dp)
+                )
+            } else {
+                Text("Login")
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(
-            onClick = onNavigateToRegister,
+            onClick  = onNavigateToRegister,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Don't have an account? Register")

@@ -12,9 +12,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.animan.wholesalemanager.utils.AppPreferences
+import com.animan.wholesalemanager.viewmodel.AuthViewModel
 import com.google.firebase.auth.FirebaseAuth
 
 data class DrawerItem(
@@ -30,21 +32,21 @@ fun AppDrawer(
     onItemClick: () -> Unit,
     lowStockCount: Int = 0
 ) {
-    val context = LocalContext.current
-    val shopName = AppPreferences.getShopName(context)
+    val authViewModel: AuthViewModel = viewModel()
+    val context      = LocalContext.current
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
     val drawerItems = listOf(
-        DrawerItem("Dashboard",     Icons.Filled.Dashboard,    "dashboard"),
-        DrawerItem("Create bill",   Icons.Filled.Receipt,      "customer_list"),
-        DrawerItem("Bill history",  Icons.Filled.History,      "bill_history"),
-        DrawerItem("Customers",     Icons.Filled.People,       "customer_list"),
-        DrawerItem("Products",      Icons.Filled.Inventory,    "product_list",
+        DrawerItem("Dashboard",         Icons.Filled.Dashboard,           "dashboard"),
+        DrawerItem("Create bill",       Icons.Filled.Receipt,             "customer_list"),
+        DrawerItem("Bill history",      Icons.Filled.History,             "bill_history"),
+        DrawerItem("Customers",         Icons.Filled.People,              "customer_list"),
+        DrawerItem("Products",          Icons.Filled.Inventory,           "product_list",
             badgeCount = lowStockCount),
-        DrawerItem("Stock consumption",   Icons.Filled.RemoveShoppingCart, "stock_consumption"),
-        DrawerItem("Expenses",      Icons.Filled.MoneyOff,     "expenses"),
-        DrawerItem("Reports",       Icons.Filled.BarChart,     "reports"),
-        DrawerItem("Settings",      Icons.Filled.Settings,     "settings"),
+        DrawerItem("Stock consumption", Icons.Filled.RemoveShoppingCart,  "stock_consumption"),
+        DrawerItem("Expenses",          Icons.Filled.MoneyOff,            "expenses"),
+        DrawerItem("Reports",           Icons.Filled.BarChart,            "reports"),
+        DrawerItem("Settings",          Icons.Filled.Settings,            "settings"),
     )
 
     ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
@@ -61,11 +63,11 @@ fun AppDrawer(
                     Icons.Filled.Store,
                     contentDescription = null,
                     modifier = Modifier.size(40.dp),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    tint     = MaterialTheme.colorScheme.onPrimaryContainer
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    shopName,
+                    AppPreferences.getShopName(context),
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
@@ -82,14 +84,11 @@ fun AppDrawer(
         // ── Nav items ─────────────────────────────────────────────────
         drawerItems.forEach { item ->
             val isSelected = currentRoute == item.route
-
             NavigationDrawerItem(
                 label = { Text(item.label) },
-                icon = {
+                icon  = {
                     if (item.badgeCount > 0) {
-                        BadgedBox(badge = {
-                            Badge { Text(item.badgeCount.toString()) }
-                        }) {
+                        BadgedBox(badge = { Badge { Text(item.badgeCount.toString()) } }) {
                             Icon(item.icon, contentDescription = null)
                         }
                     } else {
@@ -97,14 +96,13 @@ fun AppDrawer(
                     }
                 },
                 selected = isSelected,
-                onClick = {
+                onClick  = {
                     onItemClick()
                     if (!isSelected) {
                         navController.navigate(item.route) {
-                            // Avoid building up a huge back stack
                             popUpTo("dashboard") { saveState = true }
                             launchSingleTop = true
-                            restoreState = true
+                            restoreState    = true
                         }
                     }
                 },
@@ -119,8 +117,24 @@ fun AppDrawer(
 
         // ── Logout ────────────────────────────────────────────────────
         NavigationDrawerItem(
-            label = { Text("Logout", color = MaterialTheme.colorScheme.error) },
-            icon = {
+            label = {
+                if (authViewModel.isLoading.value) {
+                    Row(
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier    = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color       = MaterialTheme.colorScheme.error
+                        )
+                        Text("Backing up…", color = MaterialTheme.colorScheme.error)
+                    }
+                } else {
+                    Text("Logout", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            icon     = {
                 Icon(
                     Icons.Filled.Logout,
                     contentDescription = null,
@@ -128,11 +142,13 @@ fun AppDrawer(
                 )
             },
             selected = false,
-            onClick = {
+            onClick  = {
+                if (authViewModel.isLoading.value) return@NavigationDrawerItem  // ← guard instead of enabled
                 onItemClick()
-                FirebaseAuth.getInstance().signOut()
-                navController.navigate("login") {
-                    popUpTo(0) { inclusive = true }
+                authViewModel.logoutWithBackup(context) {
+                    navController.navigate("login") {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             },
             modifier = Modifier.padding(horizontal = 8.dp)

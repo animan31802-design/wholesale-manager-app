@@ -7,6 +7,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
@@ -20,12 +21,13 @@ fun RegisterScreen(
     onNavigateToLogin: () -> Unit = {}
 ) {
     val viewModel: AuthViewModel = viewModel()
+    val context = LocalContext.current
 
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
+    var email           by remember { mutableStateOf("") }
+    var password        by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
-    var localError by remember { mutableStateOf<String?>(null) }
+    var localError      by remember { mutableStateOf<String?>(null) }
 
     AuthBackground {
 
@@ -34,22 +36,22 @@ fun RegisterScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         OutlinedTextField(
-            value = email,
+            value         = email,
             onValueChange = { email = it; localError = null },
-            label = { Text("Email") },
-            modifier = Modifier.fillMaxWidth()
+            label         = { Text("Email") },
+            modifier      = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedTextField(
-            value = password,
-            onValueChange = { password = it; localError = null },
-            label = { Text("Password") },
-            modifier = Modifier.fillMaxWidth(),
+            value               = password,
+            onValueChange       = { password = it; localError = null },
+            label               = { Text("Password") },
+            modifier            = Modifier.fillMaxWidth(),
             visualTransformation = if (passwordVisible) VisualTransformation.None
             else PasswordVisualTransformation(),
-            trailingIcon = {
+            trailingIcon        = {
                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                     Icon(
                         if (passwordVisible) Icons.Filled.VisibilityOff
@@ -63,10 +65,10 @@ fun RegisterScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         OutlinedTextField(
-            value = confirmPassword,
-            onValueChange = { confirmPassword = it; localError = null },
-            label = { Text("Confirm password") },
-            modifier = Modifier.fillMaxWidth(),
+            value               = confirmPassword,
+            onValueChange       = { confirmPassword = it; localError = null },
+            label               = { Text("Confirm password") },
+            modifier            = Modifier.fillMaxWidth(),
             visualTransformation = PasswordVisualTransformation()
         )
 
@@ -81,23 +83,24 @@ fun RegisterScreen(
         Button(
             onClick = {
                 localError = when {
-                    email.isBlank() -> "Email cannot be empty"
-                    password.length < 6 -> "Password must be at least 6 characters"
-                    password != confirmPassword -> "Passwords do not match"
-                    else -> null
+                    email.isBlank()              -> "Email cannot be empty"
+                    password.length < 6          -> "Password must be at least 6 characters"
+                    password != confirmPassword  -> "Passwords do not match"
+                    else                         -> null
                 }
                 if (localError != null) return@Button
 
-                viewModel.register(email.trim(), password.trim()) {
+                viewModel.register(email.trim(), password.trim(), context) {
                     onRegisterSuccess()
                 }
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled  = !viewModel.isLoading.value
         ) {
             if (viewModel.isLoading.value) {
                 CircularProgressIndicator(
                     strokeWidth = 2.dp,
-                    modifier = Modifier.size(20.dp)
+                    modifier    = Modifier.size(20.dp)
                 )
             } else {
                 Text("Register")
@@ -107,7 +110,7 @@ fun RegisterScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         TextButton(
-            onClick = onNavigateToLogin,
+            onClick  = onNavigateToLogin,
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Already have an account? Login")

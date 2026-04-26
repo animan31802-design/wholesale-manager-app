@@ -27,4 +27,10 @@ class FirebaseAuthHelper {
             .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { onError(it.message ?: "Registration failed") }
     }
+
+    fun logout() {
+        auth.signOut()
+    }
+
+    fun currentUserId(): String? = auth.currentUser?.uid
 }

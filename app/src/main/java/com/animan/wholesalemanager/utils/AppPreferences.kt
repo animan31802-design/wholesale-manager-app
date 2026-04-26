@@ -38,4 +38,16 @@ object AppPreferences {
         prefs(context).getString(KEY_LAST_BACKUP, "") ?: ""
     fun setLastBackupTime(context: Context, time: String) =
         prefs(context).edit().putString(KEY_LAST_BACKUP, time).apply()
+
+    fun setRestoreDoneForUser(context: Context, uid: String) {
+        prefs(context).edit().putBoolean("restore_done_$uid", true).apply()
+    }
+
+    fun isRestoreDoneForUser(context: Context, uid: String): Boolean {
+        return prefs(context).getBoolean("restore_done_$uid", false)
+    }
+
+    fun clearRestoreDoneForUser(context: Context, uid: String) {
+        prefs(context).edit().remove("restore_done_$uid").apply()
+    }
 }

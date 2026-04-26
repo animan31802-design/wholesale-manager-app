@@ -23,6 +23,7 @@ import androidx.navigation.NavController
 import com.animan.wholesalemanager.printer.PrinterManager
 import com.animan.wholesalemanager.utils.PriceUtils.round2dp
 import com.animan.wholesalemanager.utils.PriceUtils.toRupees
+import com.animan.wholesalemanager.viewmodel.AuthViewModel
 import com.animan.wholesalemanager.viewmodel.BillViewModel
 import com.animan.wholesalemanager.viewmodel.ExpenseViewModel
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
@@ -37,6 +38,8 @@ fun DashboardScreen(navController: NavController) {
     val billViewModel:    BillViewModel    = viewModel()
     val expenseViewModel: ExpenseViewModel = viewModel()
     val productViewModel: ProductViewModel = viewModel()
+    val authViewModel: AuthViewModel = viewModel()
+    val snackbarHostState = remember { SnackbarHostState() }
     val printerManager = remember { PrinterManager() }
     val context        = LocalContext.current
     val scope          = rememberCoroutineScope()
@@ -50,6 +53,23 @@ fun DashboardScreen(navController: NavController) {
         billViewModel.fetchBills()
         expenseViewModel.fetchExpenses()
         productViewModel.fetchLowStockProducts()
+        authViewModel.checkAndRestoreBackup(context) {
+            // Restore wrote new data to SQLite — re-fetch so UI updates immediately
+            billViewModel.fetchBills()
+            expenseViewModel.fetchExpenses()
+            productViewModel.fetchLowStockProducts()
+        }
+    }
+
+    val restoreMsg = authViewModel.restoreStatus.value
+    LaunchedEffect(restoreMsg) {
+        if (!restoreMsg.isNullOrBlank()) {
+            snackbarHostState.showSnackbar(
+                message  = restoreMsg,
+                duration = SnackbarDuration.Long
+            )
+            authViewModel.restoreStatus.value = null   // clear so it doesn't re-show
+        }
     }
 
     val lowStockCount = productViewModel.lowStockList.value.size
@@ -579,6 +599,70 @@ fun DashboardScreen(navController: NavController) {
                 }
 
                 item { Spacer(Modifier.height(16.dp)) }
+            }
+
+            // Logout backup overlay
+            if (authViewModel.isLoggingOut.value) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        shape     = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    ) {
+                        Column(
+                            modifier            = Modifier.padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            CircularProgressIndicator()
+                            Text(
+                                "Backing up your data…",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                "Please wait before closing the app",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Restore overlay
+            if (authViewModel.isLoading.value) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        shape     = RoundedCornerShape(16.dp),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                    ) {
+                        Column(
+                            modifier            = Modifier.padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            CircularProgressIndicator()
+                            Text(
+                                "Restoring your data…",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Text(
+                                "Fetching your last backup",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
         }
     }

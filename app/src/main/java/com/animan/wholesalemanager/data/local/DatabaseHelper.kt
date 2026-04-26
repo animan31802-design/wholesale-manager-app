@@ -536,4 +536,16 @@ class DatabaseHelper(context: Context) :
         put(COL_PRODUCT_GST, gstPercent)
         put(COL_PRODUCT_ALLOW_PARTIAL, if (allowPartial) 1 else 0)  // ← NEW
     }
+
+    fun clearAllData() {
+        writableDatabase.apply {
+            // Delete children before parents to respect foreign keys
+            delete(TABLE_BILL_ITEMS, null, null)
+            delete(TABLE_LEDGER,     null, null)
+            delete(TABLE_BILLS,      null, null)
+            delete(TABLE_EXPENSES,   null, null)
+            delete(TABLE_CUSTOMERS,  null, null)
+            delete(TABLE_PRODUCTS,   null, null)
+        }
+    }
 }

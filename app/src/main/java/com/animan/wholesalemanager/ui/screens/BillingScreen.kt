@@ -35,9 +35,11 @@ import com.animan.wholesalemanager.utils.PriceUtils.round2dp
 import com.animan.wholesalemanager.utils.PriceUtils.toRupees
 import com.animan.wholesalemanager.viewmodel.CustomerViewModel
 import com.animan.wholesalemanager.viewmodel.ProductViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-// ── Sort options ──────────────────────────────────────────────────────
 private enum class SortMode { NAME, FREQUENT }
 
 @Composable
@@ -45,10 +47,11 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
 
     val customerViewModel: CustomerViewModel = viewModel()
     val productViewModel: ProductViewModel   = viewModel()
-    val printerManager = remember { PrinterManager() }
-    val context = LocalContext.current
+    val printerManager   = remember { PrinterManager() }
+    val context          = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val searchFocusRequester = remember { FocusRequester() }
+    val scope            = rememberCoroutineScope()
 
     var searchQuery      by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("All") }
@@ -56,9 +59,9 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
     var paidAmount       by remember { mutableStateOf("") }
     var message          by remember { mutableStateOf("") }
     var showCart         by remember { mutableStateOf(false) }
-    val cartQty = remember { mutableStateMapOf<String, Double>() }  // ← Double
+    var isSaving         by remember { mutableStateOf(false) }   // ← single source of truth
+    val cartQty          = remember { mutableStateMapOf<String, Double>() }
 
-    // ── Qty dialog state ──────────────────────────────────────────────
     var qtyDialogProduct by remember { mutableStateOf<Product?>(null) }
 
     LaunchedEffect(Unit) {
@@ -77,24 +80,20 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
         if (searchQuery.isBlank()) productViewModel.filterByCategory(selectedCategory)
     }
 
-    // ── Sorted product list ───────────────────────────────────────────
     val sortedProducts by remember {
         derivedStateOf {
             when (sortMode) {
-                SortMode.NAME     -> productViewModel.productList.value
-                    .sortedBy { it.name }
+                SortMode.NAME     -> productViewModel.productList.value.sortedBy { it.name }
                 SortMode.FREQUENT -> {
-                    val frequent = productViewModel.frequentList.value
+                    val frequent    = productViewModel.frequentList.value
                     val frequentIds = frequent.map { it.id }.toSet()
                     frequent + productViewModel.productList.value
-                        .filter { it.id !in frequentIds }
-                        .sortedBy { it.name }
+                        .filter { it.id !in frequentIds }.sortedBy { it.name }
                 }
             }
         }
     }
 
-    // ── BillItems derived from cart ───────────────────────────────────
     val billItems: List<BillItem> by remember {
         derivedStateOf {
             productViewModel.productList.value
@@ -102,7 +101,7 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
                 .map { p -> BillItem(
                     productId  = p.id, name = p.name, price = p.sellingPrice,
                     costPrice  = p.costPrice, unit = p.unit,
-                    quantity   = cartQty[p.id] ?: 1.0,   // ← Double
+                    quantity   = cartQty[p.id] ?: 1.0,
                     gstPercent = p.gstPercent
                 )}
         }
@@ -113,15 +112,11 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
     val grandTotal by remember { derivedStateOf { itemsTotal + gstTotal } }
     val totalOwed  = grandTotal + customer.balance
 
-    // ── Add to cart ───────────────────────────────────────────────────
     fun addToCart(p: Product) {
         val cur = cartQty[p.id] ?: 0.0
         if (cur < p.quantity) {
             if (p.allowPartial) {
-                // For partial products — open qty dialog on first add
-                // On subsequent adds via chip/row, just +1
-                if (cur == 0.0) qtyDialogProduct = p
-                else cartQty[p.id] = cur + 1.0
+                if (cur == 0.0) qtyDialogProduct = p else cartQty[p.id] = cur + 1.0
             } else {
                 cartQty[p.id] = cur + 1.0
             }
@@ -131,218 +126,250 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
     fun removeFromCart(p: Product) {
         val cur = cartQty[p.id] ?: 0.0
         when {
-            cur <= 0.0  -> cartQty.remove(p.id)
-            cur <= 1.0  -> cartQty.remove(p.id)
-            else        -> cartQty[p.id] = cur - 1.0
+            cur <= 1.0 -> cartQty.remove(p.id)
+            else       -> cartQty[p.id] = cur - 1.0
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(modifier = Modifier.fillMaxSize()) {
 
-        // ── Top bar ───────────────────────────────────────────────────
-        Surface(shadowElevation = 4.dp) {
-            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Column {
-                        Text(customer.name, style = MaterialTheme.typography.titleMedium)
-                        if (customer.balance > 0)
-                            Text("Prev. balance: ${customer.balance.toRupees()}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error)
-                    }
-                    BadgedBox(badge = {
-                        val totalItems = cartQty.values.sum()
-                        if (totalItems > 0) Badge {
-                            Text(formatQty(totalItems))
+        Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+
+            // ── Top bar ───────────────────────────────────────────────────
+            Surface(shadowElevation = 4.dp) {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                    Row(modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment     = Alignment.CenterVertically) {
+                        Column {
+                            Text(customer.name, style = MaterialTheme.typography.titleMedium)
+                            if (customer.balance > 0)
+                                Text("Prev. balance: ${customer.balance.toRupees()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.error)
                         }
-                    }) {
-                        Button(onClick = { showCart = !showCart }) {
-                            Text(if (showCart) "Products" else "Cart ${grandTotal.toRupees()}")
+                        BadgedBox(badge = {
+                            val totalItems = cartQty.values.sum()
+                            if (totalItems > 0) Badge { Text(formatQty(totalItems)) }
+                        }) {
+                            Button(onClick = { showCart = !showCart }) {
+                                Text(if (showCart) "Products" else "Cart ${grandTotal.toRupees()}")
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (showCart) {
-            CartView(
-                billItems          = billItems,
-                customer           = customer,
-                itemsTotal         = itemsTotal,
-                gstTotal           = gstTotal,
-                grandTotal         = grandTotal,
-                totalOwed          = totalOwed,
-                paidAmount         = paidAmount,
-                onPaidAmountChange = { paidAmount = it; message = "" },
-                message            = message,
-                isLoading          = customerViewModel.isLoading.value,
-                errorMessage       = customerViewModel.errorMessage.value,
-                onQtyDecrease      = { item ->
-                    val cur = cartQty[item.productId] ?: 1.0
-                    if (cur <= 1.0) cartQty.remove(item.productId)
-                    else cartQty[item.productId] = cur - 1.0
-                },
-                onQtyIncrease      = { item ->
-                    val avail = productViewModel.productList.value
-                        .find { it.id == item.productId }?.quantity ?: 0.0
-                    val cur = cartQty[item.productId] ?: 1.0
-                    if (cur < avail) cartQty[item.productId] = cur + 1.0
-                },
-                onQtyTapped        = { item ->
-                    // Tap qty number → open dialog
-                    val product = productViewModel.productList.value
-                        .find { it.id == item.productId }
-                    if (product != null) qtyDialogProduct = product
-                },
-                onRemove           = { cartQty.remove(it.productId) },
-                onSaveBill         = {
-                    if (billItems.isEmpty()) { message = "Add at least one product"; return@CartView }
-                    val paid = paidAmount.toDoubleOrNull()
-                    if (paid == null)     { message = "Enter a valid paid amount"; return@CartView }
-                    if (paid < 0)         { message = "Cannot be negative"; return@CartView }
-                    if (paid > totalOwed) { message = "Exceeds total amount"; return@CartView }
-
-                    customerViewModel.createBill(
-                        customer, billItems, itemsTotal, gstTotal, grandTotal, paid
-                    ) { _ ->
-                        val printResult = printerManager.printBill(
-                            context, customer, billItems, itemsTotal, paid, totalOwed
-                        )
-                        message = if (printResult == "Printed successfully") "Bill saved & printed"
-                        else "Bill saved"
-
-                        //sharePdf(context, file)
-
-                        // WhatsApp text summary (no extra tap needed — fires alongside PDF)
-                        // Comment this out if you only want PDF share
-                        // WhatsAppShare.shareTextSummary(context, customer, billItems, grandTotal, paid, balanceLeft)
-                        cartQty.clear()
-                        onBillCreated()
-                    }
-                }
-            )
-        } else {
-            // ── Product search + list ─────────────────────────────────
-            Column(modifier = Modifier.fillMaxSize()) {
-
-                // Search bar
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it; selectedCategory = "All" },
-                    label = { Text("Search product, category, barcode…") },
-                    modifier = Modifier.fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
-                        .focusRequester(searchFocusRequester),
-                    singleLine = true,
-                    leadingIcon = { Icon(Icons.Filled.Search, null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty())
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Filled.Close, null)
-                            }
+            if (showCart) {
+                CartView(
+                    billItems          = billItems,
+                    customer           = customer,
+                    itemsTotal         = itemsTotal,
+                    gstTotal           = gstTotal,
+                    grandTotal         = grandTotal,
+                    totalOwed          = totalOwed,
+                    paidAmount         = paidAmount,
+                    onPaidAmountChange = { paidAmount = it; message = "" },
+                    message            = message,
+                    isLoading          = customerViewModel.isLoading.value,
+                    isSaving           = isSaving,
+                    errorMessage       = customerViewModel.errorMessage.value,
+                    onQtyDecrease      = { item ->
+                        val cur = cartQty[item.productId] ?: 1.0
+                        if (cur <= 1.0) cartQty.remove(item.productId)
+                        else cartQty[item.productId] = cur - 1.0
                     },
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = {
-                        sortedProducts.firstOrNull()?.let { addToCart(it) }
-                        keyboardController?.hide()
-                    })
+                    onQtyIncrease      = { item ->
+                        val avail = productViewModel.productList.value
+                            .find { it.id == item.productId }?.quantity ?: 0.0
+                        val cur = cartQty[item.productId] ?: 1.0
+                        if (cur < avail) cartQty[item.productId] = cur + 1.0
+                    },
+                    onQtyTapped        = { item ->
+                        val product = productViewModel.productList.value
+                            .find { it.id == item.productId }
+                        if (product != null) qtyDialogProduct = product
+                    },
+                    onRemove           = { cartQty.remove(it.productId) },
+                    onSaveBill         = {
+                        // Validation
+                        if (billItems.isEmpty()) { message = "Add at least one product"; return@CartView }
+                        val paid = paidAmount.toDoubleOrNull()
+                        if (paid == null)     { message = "Enter a valid paid amount"; return@CartView }
+                        if (paid < 0)         { message = "Cannot be negative"; return@CartView }
+                        if (paid > totalOwed) { message = "Exceeds total amount"; return@CartView }
+
+                        isSaving = true   // triggers overlay + disables button immediately
+
+                        val itemsSnapshot = billItems.toList()
+                        val paidSnapshot  = paid
+
+                        scope.launch {
+                            // Step 1: save to SQLite off main thread
+                            try {
+                                withContext(Dispatchers.IO) {
+                                    customerViewModel.createBillSuspend(
+                                        customer, itemsSnapshot,
+                                        itemsTotal, gstTotal, grandTotal, paidSnapshot
+                                    )
+                                }
+                            } catch (e: Exception) {
+                                message  = "Failed to save bill: ${e.message}"
+                                isSaving = false
+                                return@launch
+                            }
+
+                            // Step 2: print off main thread (Bluetooth blocks)
+                            val printResult = withContext(Dispatchers.IO) {
+                                printerManager.printBill(
+                                    context, customer, itemsSnapshot,
+                                    itemsTotal, paidSnapshot, totalOwed
+                                )
+                            }
+
+                            // Step 3: update UI on main thread
+                            message  = if (printResult == "Printed successfully")
+                                "Bill saved & printed" else "Bill saved"
+                            isSaving = false
+                            cartQty.clear()
+                            onBillCreated()
+                        }
+                    }
                 )
+            } else {
+                Column(modifier = Modifier.fillMaxSize()) {
 
-                // ── Sort chips + category chips in one scrollable row ──
-                LazyRow(
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Sort chips
-                    item {
-                        FilterChip(
-                            selected = sortMode == SortMode.FREQUENT,
-                            onClick  = { sortMode = SortMode.FREQUENT },
-                            label    = { Text("Most sold") }
-                        )
-                    }
-                    item {
-                        FilterChip(
-                            selected = sortMode == SortMode.NAME,
-                            onClick  = { sortMode = SortMode.NAME },
-                            label    = { Text("A→Z") }
-                        )
-                    }
+                    OutlinedTextField(
+                        value         = searchQuery,
+                        onValueChange = { searchQuery = it; selectedCategory = "All" },
+                        label         = { Text("Search product, category, barcode…") },
+                        modifier      = Modifier.fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .focusRequester(searchFocusRequester),
+                        singleLine    = true,
+                        leadingIcon   = { Icon(Icons.Filled.Search, null) },
+                        trailingIcon  = {
+                            if (searchQuery.isNotEmpty())
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Filled.Close, null)
+                                }
+                        },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = {
+                            sortedProducts.firstOrNull()?.let { addToCart(it) }
+                            keyboardController?.hide()
+                        })
+                    )
 
-                    // Divider-like spacer
-                    item { Spacer(Modifier.width(4.dp)) }
-
-                    // Category chips
-                    val categories = listOf("All") + productViewModel.categoryList.value
-                    items(categories) { cat ->
-                        FilterChip(
-                            selected = selectedCategory == cat,
-                            onClick  = { selectedCategory = cat; searchQuery = "" },
-                            label    = { Text(cat) }
-                        )
-                    }
-                }
-
-                // Frequent row — only in FREQUENT sort + no search + All category
-                if (sortMode == SortMode.FREQUENT &&
-                    searchQuery.isBlank() &&
-                    selectedCategory == "All" &&
-                    productViewModel.frequentList.value.isNotEmpty()) {
-                    Text("  Frequently sold",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(top = 8.dp))
                     LazyRow(
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        contentPadding        = PaddingValues(horizontal = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(productViewModel.frequentList.value) { p ->
-                            FrequentProductChip(p, cartQty[p.id] ?: 0.0) { addToCart(p) }
+                        item {
+                            FilterChip(selected = sortMode == SortMode.FREQUENT,
+                                onClick = { sortMode = SortMode.FREQUENT },
+                                label   = { Text("Most sold") })
+                        }
+                        item {
+                            FilterChip(selected = sortMode == SortMode.NAME,
+                                onClick = { sortMode = SortMode.NAME },
+                                label   = { Text("A→Z") })
+                        }
+                        item { Spacer(Modifier.width(4.dp)) }
+                        val categories = listOf("All") + productViewModel.categoryList.value
+                        items(categories) { cat ->
+                            FilterChip(
+                                selected = selectedCategory == cat,
+                                onClick  = { selectedCategory = cat; searchQuery = "" },
+                                label    = { Text(cat) })
                         }
                     }
-                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                }
 
-                when {
-                    productViewModel.isLoading.value ->
-                        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                    if (sortMode == SortMode.FREQUENT &&
+                        searchQuery.isBlank() &&
+                        selectedCategory == "All" &&
+                        productViewModel.frequentList.value.isNotEmpty()) {
+                        Text("  Frequently sold",
+                            style    = MaterialTheme.typography.labelMedium,
+                            color    = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 8.dp))
+                        LazyRow(
+                            contentPadding        = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(productViewModel.frequentList.value) { p ->
+                                FrequentProductChip(p, cartQty[p.id] ?: 0.0) { addToCart(p) }
+                            }
                         }
-                    sortedProducts.isEmpty() && searchQuery.isNotBlank() ->
-                        Box(Modifier.fillMaxWidth().padding(24.dp),
-                            contentAlignment = Alignment.Center) {
-                            Text("No products found for \"$searchQuery\"",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    else -> LazyColumn {
-                        items(sortedProducts, key = { it.id }) { p ->
-                            ProductBillingRow(
-                                product    = p,
-                                qtyInCart  = cartQty[p.id] ?: 0.0,
-                                onAdd      = { addToCart(p) },
-                                onRemove   = { removeFromCart(p) },
-                                onQtyTapped = { qtyDialogProduct = p }
-                            )
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    }
+
+                    when {
+                        productViewModel.isLoading.value ->
+                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+                            }
+                        sortedProducts.isEmpty() && searchQuery.isNotBlank() ->
+                            Box(Modifier.fillMaxWidth().padding(24.dp),
+                                contentAlignment = Alignment.Center) {
+                                Text("No products found for \"$searchQuery\"",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        else -> LazyColumn {
+                            items(sortedProducts, key = { it.id }) { p ->
+                                ProductBillingRow(
+                                    product     = p,
+                                    qtyInCart   = cartQty[p.id] ?: 0.0,
+                                    onAdd       = { addToCart(p) },
+                                    onRemove    = { removeFromCart(p) },
+                                    onQtyTapped = { qtyDialogProduct = p }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
-    }
 
-    // ── Qty input dialog ──────────────────────────────────────────────
+        // ── Saving overlay — drawn on top of CartView ────────────────────
+        if (isSaving) {
+            Box(
+                modifier         = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Card(
+                    shape     = MaterialTheme.shapes.large,
+                    elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
+                ) {
+                    Column(
+                        modifier            = Modifier.padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        CircularProgressIndicator()
+                        Text(
+                            "Saving & printing…",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                }
+            }
+        }
+
+    } // close Box
+
     qtyDialogProduct?.let { product ->
         QtyInputDialog(
-            product      = product,
-            currentQty   = cartQty[product.id] ?: 0.0,
-            onConfirm    = { newQty ->
+            product    = product,
+            currentQty = cartQty[product.id] ?: 0.0,
+            onConfirm  = { newQty ->
                 if (newQty <= 0.0) cartQty.remove(product.id)
                 else cartQty[product.id] = newQty
                 qtyDialogProduct = null
             },
-            onDismiss    = { qtyDialogProduct = null }
+            onDismiss  = { qtyDialogProduct = null }
         )
     }
 }
@@ -362,37 +389,29 @@ private fun QtyInputDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(product.name,
-                style = MaterialTheme.typography.titleMedium,
-                maxLines = 1)
-        },
-        text = {
+        title = { Text(product.name, style = MaterialTheme.typography.titleMedium, maxLines = 1) },
+        text  = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Enter quantity (${product.unit})",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
-                    value = input,
+                    value         = input,
                     onValueChange = { v ->
                         if (isPartial) {
-                            // Allow digits and single decimal point
                             if (v.isEmpty() || v.matches(Regex("^\\d*\\.?\\d*$"))) input = v
                         } else {
-                            // Whole units only — digits only
                             if (v.all { it.isDigit() }) input = v
                         }
                     },
-                    label = { Text("Qty") },
-                    singleLine = true,
+                    label          = { Text("Qty") },
+                    singleLine     = true,
                     keyboardOptions = KeyboardOptions(
-                        keyboardType = if (isPartial) KeyboardType.Decimal
-                        else KeyboardType.Number
+                        keyboardType = if (isPartial) KeyboardType.Decimal else KeyboardType.Number
                     ),
                     modifier = Modifier.fillMaxWidth(),
-                    suffix = { Text(product.unit) }
+                    suffix   = { Text(product.unit) }
                 )
-                // Stock info
                 Text("Available: ${formatQty(product.quantity)} ${product.unit}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -400,17 +419,15 @@ private fun QtyInputDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    val qty = input.toDoubleOrNull() ?: 0.0
+                onClick  = {
+                    val qty    = input.toDoubleOrNull() ?: 0.0
                     val capped = qty.coerceAtMost(product.quantity)
                     onConfirm(capped)
                 },
                 enabled = input.isNotBlank() && (input.toDoubleOrNull() ?: 0.0) > 0.0
             ) { Text("Set qty") }
         },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) { Text("Cancel") }
-        }
+        dismissButton = { OutlinedButton(onClick = onDismiss) { Text("Cancel") } }
     )
 }
 
@@ -427,7 +444,7 @@ private fun ProductBillingRow(
     val atLimit    = qtyInCart >= product.quantity
 
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween) {
 
         Column(modifier = Modifier.weight(1f)) {
@@ -442,38 +459,33 @@ private fun ProductBillingRow(
                 else MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (product.category.isNotBlank())
-                Text(product.category, style = MaterialTheme.typography.labelSmall,
+                Text(product.category,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary)
         }
 
         if (qtyInCart > 0.0) {
-            Row(verticalAlignment = Alignment.CenterVertically,
+            Row(verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                FilledIconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
-                    Text("-")
-                }
-                // ── Tappable qty chip ─────────────────────────────────
+                FilledIconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) { Text("-") }
                 Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape    = MaterialTheme.shapes.small,
+                    color    = MaterialTheme.colorScheme.primaryContainer,
                     modifier = Modifier.clickable { onQtyTapped() }
                 ) {
                     Text(
-                        text = formatQty(qtyInCart),
+                        text     = formatQty(qtyInCart),
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.titleSmall,
+                        style    = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        color    = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
                 FilledIconButton(onClick = onAdd, modifier = Modifier.size(32.dp),
-                    enabled = !atLimit) {
-                    Text("+")
-                }
+                    enabled = !atLimit) { Text("+") }
             }
         } else {
-            Button(onClick = onAdd, enabled = !outOfStock,
-                modifier = Modifier.height(36.dp)) {
+            Button(onClick = onAdd, enabled = !outOfStock, modifier = Modifier.height(36.dp)) {
                 Text(if (outOfStock) "Out of stock" else "Add")
             }
         }
@@ -483,14 +495,10 @@ private fun ProductBillingRow(
 
 // ── Frequent product chip ─────────────────────────────────────────────
 @Composable
-private fun FrequentProductChip(
-    product: Product,
-    qtyInCart: Double,
-    onAdd: () -> Unit
-) {
+private fun FrequentProductChip(product: Product, qtyInCart: Double, onAdd: () -> Unit) {
     ElevatedCard(
-        onClick = onAdd,
-        enabled = product.quantity > qtyInCart,
+        onClick  = onAdd,
+        enabled  = product.quantity > qtyInCart,
         modifier = Modifier.width(110.dp)
     ) {
         Column(modifier = Modifier.padding(8.dp)) {
@@ -516,6 +524,7 @@ private fun CartView(
     onPaidAmountChange: (String) -> Unit,
     message: String,
     isLoading: Boolean,
+    isSaving: Boolean,      // ← from BillingScreen — NO local override
     errorMessage: String?,
     onQtyDecrease: (BillItem) -> Unit,
     onQtyIncrease: (BillItem) -> Unit,
@@ -526,8 +535,10 @@ private fun CartView(
     var showUpiDialog by remember { mutableStateOf(false) }
     var upiAmount     by remember { mutableStateOf(0.0) }
 
+    // !! NO local isSaving declaration here — use the parameter only !!
+
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier       = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -545,7 +556,7 @@ private fun CartView(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Row(modifier = Modifier.fillMaxWidth().padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically) {
+                    verticalAlignment     = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(item.name, style = MaterialTheme.typography.titleSmall)
                         Text(
@@ -559,25 +570,22 @@ private fun CartView(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
+                        verticalAlignment     = Alignment.CenterVertically) {
                         FilledIconButton(onClick = { onQtyDecrease(item) },
                             Modifier.size(32.dp)) { Text("-") }
-
-                        // ── Tappable qty chip in cart ─────────────────
                         Surface(
-                            shape = MaterialTheme.shapes.small,
-                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape    = MaterialTheme.shapes.small,
+                            color    = MaterialTheme.colorScheme.primaryContainer,
                             modifier = Modifier.clickable { onQtyTapped(item) }
                         ) {
                             Text(
-                                text = formatQty(item.quantity),
+                                text     = formatQty(item.quantity),
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                style = MaterialTheme.typography.titleSmall,
+                                style    = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                color    = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                         }
-
                         FilledIconButton(onClick = { onQtyIncrease(item) },
                             Modifier.size(32.dp)) { Text("+") }
                         IconButton(onClick = { onRemove(item) }) {
@@ -588,7 +596,6 @@ private fun CartView(
             }
         }
 
-        // Bill summary
         item {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp),
@@ -599,24 +606,19 @@ private fun CartView(
                     if (gstTotal > 0) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
                             Text("GST", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(gstTotal.toRupees(),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(gstTotal.toRupees(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     if (customer.balance > 0) {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                            Text("Previous balance",
-                                color = MaterialTheme.colorScheme.error)
-                            Text(customer.balance.toRupees(),
-                                color = MaterialTheme.colorScheme.error)
+                            Text("Previous balance", color = MaterialTheme.colorScheme.error)
+                            Text(customer.balance.toRupees(), color = MaterialTheme.colorScheme.error)
                         }
                     }
                     HorizontalDivider()
                     Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
-                        Text("Total payable",
-                            style = MaterialTheme.typography.titleMedium)
-                        Text(totalOwed.toRupees(),
-                            style = MaterialTheme.typography.titleMedium)
+                        Text("Total payable", style = MaterialTheme.typography.titleMedium)
+                        Text(totalOwed.toRupees(), style = MaterialTheme.typography.titleMedium)
                     }
                 }
             }
@@ -624,9 +626,11 @@ private fun CartView(
 
         item {
             OutlinedTextField(
-                value = paidAmount, onValueChange = onPaidAmountChange,
-                label = { Text("Amount paid (₹)") },
-                modifier = Modifier.fillMaxWidth(), singleLine = true,
+                value         = paidAmount,
+                onValueChange = onPaidAmountChange,
+                label         = { Text("Amount paid (₹)") },
+                modifier      = Modifier.fillMaxWidth(),
+                singleLine    = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
             )
         }
@@ -647,7 +651,7 @@ private fun CartView(
 
         item {
             OutlinedButton(
-                onClick = {
+                onClick  = {
                     upiAmount = totalOwed.round2dp() - (paidAmount.toDoubleOrNull() ?: 0.0)
                     if (upiAmount > 0) showUpiDialog = true
                 },
@@ -666,28 +670,39 @@ private fun CartView(
             Text(it, color = MaterialTheme.colorScheme.error)
         }}
 
+        // ── Save bill button ──────────────────────────────────────────
         item {
             Button(
-                onClick = onSaveBill,
+                onClick  = { onSaveBill() },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = billItems.isNotEmpty() && !isLoading
+                enabled  = billItems.isNotEmpty() && !isSaving   // ← uses parameter
             ) {
-                if (isLoading) CircularProgressIndicator(strokeWidth = 2.dp)
-                else Text("Save bill")
+                if (isSaving) {
+                    CircularProgressIndicator(
+                        modifier    = Modifier.size(20.dp),
+                        strokeWidth = 2.dp,
+                        color       = MaterialTheme.colorScheme.onPrimary
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text("Saving & printing…")
+                } else {
+                    Text("Save bill")
+                }
             }
         }
+
         item { Spacer(Modifier.height(16.dp)) }
     }
 
     if (showUpiDialog) {
         UpiPaymentDialog(
-            amount = upiAmount,
-            billNote = "Invoice",
+            amount     = upiAmount,
+            billNote   = "Invoice",
             onMarkPaid = {
                 onPaidAmountChange(upiAmount.formatPrice())
                 showUpiDialog = false
             },
-            onDismiss = { showUpiDialog = false }
+            onDismiss  = { showUpiDialog = false }
         )
     }
 }
