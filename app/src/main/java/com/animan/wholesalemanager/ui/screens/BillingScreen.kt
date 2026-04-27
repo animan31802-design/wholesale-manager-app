@@ -96,7 +96,7 @@ fun BillingScreen(customer: Customer, onBillCreated: () -> Unit) {
 
     val billItems: List<BillItem> by remember {
         derivedStateOf {
-            productViewModel.productList.value
+            productViewModel.allProducts.value
                 .filter { (cartQty[it.id] ?: 0.0) > 0.0 }
                 .map { p -> BillItem(
                     productId  = p.id, name = p.name, price = p.sellingPrice,

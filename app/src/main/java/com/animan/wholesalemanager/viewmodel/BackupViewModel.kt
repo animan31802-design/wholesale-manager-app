@@ -13,6 +13,9 @@ import com.animan.wholesalemanager.data.local.Customer
 import com.animan.wholesalemanager.data.local.Expense
 import com.animan.wholesalemanager.data.local.Ledger
 import com.animan.wholesalemanager.data.local.Product
+import com.animan.wholesalemanager.data.local.Purchase
+import com.animan.wholesalemanager.data.local.PurchaseItem
+import com.animan.wholesalemanager.data.local.Supplier
 import com.animan.wholesalemanager.utils.AppPreferences
 import com.animan.wholesalemanager.work.BackupWorker
 import com.google.firebase.auth.FirebaseAuth
@@ -195,6 +198,53 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (_: Exception) { null }
             }
 
+            val supplierDocs = userDoc.collection("suppliers").get().await()
+            val suppliers = supplierDocs.documents.mapNotNull { d ->
+                try {
+                    Supplier(
+                        id = d.getString("id") ?: return@mapNotNull null,
+                        name = d.getString("name") ?: "",
+                        phone = d.getString("phone") ?: "",
+                        address = d.getString("address") ?: "",
+                        balance = d.getDouble("balance") ?: 0.0
+                    )
+                } catch (_: Exception) { null }
+            }
+
+            val purchaseDocs = userDoc.collection("purchases").get().await()
+            val purchases = purchaseDocs.documents.mapNotNull { d ->
+                try {
+                    @Suppress("UNCHECKED_CAST")
+                    val rawItems = d.get("items") as? List<Map<String, Any>> ?: emptyList()
+                    val items = rawItems.map { i ->
+                        PurchaseItem(
+                            productId = i["productId"] as? String ?: "",
+                            name = i["name"] as? String ?: "",
+                            costPrice = (i["costPrice"] as? Number)?.toDouble() ?: 0.0,
+                            previousCostPrice = (i["previousCostPrice"] as? Number)?.toDouble()
+                                ?: 0.0,
+                            unit = i["unit"] as? String ?: "Piece",
+                            quantity = (i["quantity"] as? Number)?.toDouble() ?: 1.0,
+                            gstPercent = (i["gstPercent"] as? Number)?.toDouble() ?: 0.0
+                        )
+                    }
+                    Purchase(
+                        id = d.getString("id") ?: return@mapNotNull null,
+                        supplierId = d.getString("supplierId") ?: "",
+                        supplierName = d.getString("supplierName") ?: "",
+                        poNumber = d.getString("poNumber") ?: "",
+                        itemsTotal = d.getDouble("itemsTotal") ?: 0.0,
+                        gstTotal = d.getDouble("gstTotal") ?: 0.0,
+                        grandTotal = d.getDouble("grandTotal") ?: 0.0,
+                        paidAmount = d.getDouble("paidAmount") ?: 0.0,
+                        balance = d.getDouble("balance") ?: 0.0,
+                        timestamp = d.getLong("timestamp") ?: 0L,
+                        note = d.getString("note") ?: "",
+                        items = items
+                    )
+                } catch (_: Exception) { null }
+            }
+
             // ── Bills (with embedded items) ───────────────────────────
             val billDocs = userDoc.collection("bills").get().await()
             val bills = billDocs.documents.mapNotNull { d ->
@@ -254,8 +304,11 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
             bills.forEach        { db.insertBillWithItems(it) }
             ledgerEntries.forEach{ db.insertLedgerEntry(it) }
             expenses.forEach     { db.insertExpense(it) }
+            suppliers.forEach    { db.insertSupplier(it) }
+            purchases.forEach    { db.insertPurchaseWithItems(it) }
 
             "Restored ${customers.size} customers, ${products.size} products, " +
-                    "${bills.size} bills, ${expenses.size} expenses"
+                    "${bills.size} bills, ${expenses.size} expenses" +
+            "${suppliers.size} suppliers, ${purchases.size} purchases"
         }
 }

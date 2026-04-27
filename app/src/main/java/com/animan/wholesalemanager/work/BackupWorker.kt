@@ -62,6 +62,32 @@ class BackupWorker(
                 )).await()
             }
 
+            val suppliers = db.getAllSuppliers()
+            val purchases = db.getAllPurchases()
+
+            suppliers.forEach { s ->
+                userDoc.collection("suppliers").document(s.id).set(mapOf(
+                    "id" to s.id, "name" to s.name, "phone" to s.phone,
+                    "address" to s.address, "balance" to s.balance
+                )).await()
+            }
+
+            purchases.forEach { p ->
+                userDoc.collection("purchases").document(p.id).set(mapOf(
+                    "id" to p.id, "supplierId" to p.supplierId,
+                    "supplierName" to p.supplierName, "poNumber" to p.poNumber,
+                    "itemsTotal" to p.itemsTotal, "gstTotal" to p.gstTotal,
+                    "grandTotal" to p.grandTotal, "paidAmount" to p.paidAmount,
+                    "balance" to p.balance, "timestamp" to p.timestamp,
+                    "note" to p.note,
+                    "items" to p.items.map { i -> mapOf(
+                        "productId" to i.productId, "name" to i.name,
+                        "costPrice" to i.costPrice, "previousCostPrice" to i.previousCostPrice,
+                        "unit" to i.unit, "quantity" to i.quantity, "gstPercent" to i.gstPercent
+                    )}
+                )).await()
+            }
+
             // Write bills with items
             bills.forEach { bill ->
                 userDoc.collection("bills").document(bill.id).set(mapOf(
@@ -86,7 +112,9 @@ class BackupWorker(
                 "customerCount"  to customers.size,
                 "productCount"   to products.size,
                 "billCount"      to bills.size,
-                "expenseCount"   to expenses.size
+                "expenseCount"   to expenses.size,
+                "supplierCount" to suppliers.size,
+                "purchaseCount" to purchases.size
             )).await()
 
             // Save time locally — this is what the Settings screen reads

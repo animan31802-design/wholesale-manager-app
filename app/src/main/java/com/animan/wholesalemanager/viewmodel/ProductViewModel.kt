@@ -11,6 +11,7 @@ class ProductViewModel(app: Application) : AndroidViewModel(app) {
     private val repository = ProductRepository(app.applicationContext)
 
     var productList  = mutableStateOf<List<Product>>(emptyList())
+    val allProducts = mutableStateOf<List<Product>>(emptyList())
     var categoryList = mutableStateOf<List<String>>(emptyList())
     var frequentList = mutableStateOf<List<Product>>(emptyList())
     var lowStockList = mutableStateOf<List<Product>>(emptyList())
@@ -20,7 +21,7 @@ class ProductViewModel(app: Application) : AndroidViewModel(app) {
     fun fetchProducts() {
         isLoading.value = true
         repository.getProducts(
-            onResult = { isLoading.value = false; productList.value = it },
+            onResult = { isLoading.value = false; allProducts.value = it; productList.value = it },
             onError  = { isLoading.value = false; errorMessage.value = it }
         )
     }
@@ -31,8 +32,8 @@ class ProductViewModel(app: Application) : AndroidViewModel(app) {
 
     fun searchProducts(query: String)     { productList.value = repository.searchProducts(query) }
     fun filterByCategory(category: String) {
-        productList.value = if (category == "All") repository.searchProducts("")
-        else repository.getProductsByCategory(category)
+        productList.value = if (category == "All") allProducts.value
+        else allProducts.value.filter { it.category == category }
     }
     fun getProductByBarcode(barcode: String): Product? = repository.getProductByBarcode(barcode)
 

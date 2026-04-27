@@ -4,13 +4,14 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
+import java.util.UUID
 
 class DatabaseHelper(context: Context) :
     SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
 
     companion object {
         const val DATABASE_NAME    = "wholesale_manager.db"
-        const val DATABASE_VERSION = 6  // bumped: Partial Qty selling
+        const val DATABASE_VERSION = 7  // bumped: Supplier Implementation
 
         const val TABLE_CUSTOMERS    = "customers"
         const val TABLE_PRODUCTS     = "products"
@@ -81,6 +82,53 @@ class DatabaseHelper(context: Context) :
         const val COL_EXPENSE_TITLE  = "title"
         const val COL_EXPENSE_AMOUNT = "amount"
         const val COL_EXPENSE_DATE   = "date"
+
+        const val TABLE_SUPPLIERS        = "suppliers"
+        const val TABLE_PURCHASES        = "purchases"
+        const val TABLE_PURCHASE_ITEMS   = "purchase_items"
+        const val TABLE_SUPPLIER_LEDGER  = "supplier_ledger"
+
+        // suppliers
+        const val COL_SUP_ID      = "id"
+        const val COL_SUP_NAME    = "name"
+        const val COL_SUP_PHONE   = "phone"
+        const val COL_SUP_ADDRESS = "address"
+        const val COL_SUP_BALANCE = "balance"
+        const val COL_SUP_LATITUDE  = "latitude"
+        const val COL_SUP_LONGITUDE = "longitude"
+
+        // purchases
+        const val COL_PUR_ID            = "id"
+        const val COL_PUR_SUPPLIER_ID   = "supplier_id"
+        const val COL_PUR_SUPPLIER_NAME = "supplier_name"
+        const val COL_PUR_PO_NUMBER     = "po_number"
+        const val COL_PUR_ITEMS_TOTAL   = "items_total"
+        const val COL_PUR_GST_TOTAL     = "gst_total"
+        const val COL_PUR_GRAND_TOTAL   = "grand_total"
+        const val COL_PUR_PAID_AMOUNT   = "paid_amount"
+        const val COL_PUR_BALANCE       = "balance"
+        const val COL_PUR_TIMESTAMP     = "timestamp"
+        const val COL_PUR_NOTE          = "note"
+
+        // purchase_items
+        const val COL_PI_ID                 = "id"
+        const val COL_PI_PURCHASE_ID        = "purchase_id"
+        const val COL_PI_PRODUCT_ID         = "product_id"
+        const val COL_PI_NAME               = "name"
+        const val COL_PI_COST_PRICE         = "cost_price"
+        const val COL_PI_PREV_COST_PRICE    = "previous_cost_price"
+        const val COL_PI_QUANTITY           = "quantity"
+        const val COL_PI_UNIT               = "unit"
+        const val COL_PI_GST                = "gst_percent"
+
+        // supplier_ledger
+        const val COL_SL_ID          = "id"
+        const val COL_SL_SUPPLIER_ID = "supplier_id"
+        const val COL_SL_AMOUNT      = "amount"
+        const val COL_SL_TYPE        = "type"
+        const val COL_SL_PURCHASE_ID = "purchase_id"
+        const val COL_SL_NOTE        = "note"
+        const val COL_SL_TIMESTAMP   = "timestamp"
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
@@ -115,6 +163,43 @@ class DatabaseHelper(context: Context) :
             // bill_items: quantity → REAL (SQLite stores as REAL when value has decimal)
             // No ALTER needed — SQLite REAL column accepts both int and decimal reads/writes
             // We just change how we read/write in Kotlin (getDouble instead of getInt)
+        }
+        if (oldVersion < 7) {
+            runCatching {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS suppliers (
+                id TEXT PRIMARY KEY, name TEXT NOT NULL,
+                phone TEXT DEFAULT '', address TEXT DEFAULT '',
+                latitude REAL, longitude REAL,
+                balance REAL DEFAULT 0)""")
+            }
+            runCatching {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS purchases (
+                id TEXT PRIMARY KEY, supplier_id TEXT NOT NULL,
+                supplier_name TEXT NOT NULL, po_number TEXT DEFAULT '',
+                items_total REAL DEFAULT 0, gst_total REAL DEFAULT 0,
+                grand_total REAL DEFAULT 0, paid_amount REAL DEFAULT 0,
+                balance REAL DEFAULT 0, timestamp INTEGER NOT NULL,
+                note TEXT DEFAULT '')""")
+            }
+            runCatching {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS purchase_items (
+                id TEXT PRIMARY KEY, purchase_id TEXT NOT NULL,
+                product_id TEXT NOT NULL, name TEXT NOT NULL,
+                cost_price REAL NOT NULL, previous_cost_price REAL DEFAULT 0,
+                quantity REAL NOT NULL, unit TEXT DEFAULT 'Piece',
+                gst_percent REAL DEFAULT 0)""")
+            }
+            runCatching {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS supplier_ledger (
+                id TEXT PRIMARY KEY, supplier_id TEXT NOT NULL,
+                amount REAL NOT NULL, type TEXT NOT NULL,
+                purchase_id TEXT DEFAULT '', note TEXT DEFAULT '',
+                timestamp INTEGER NOT NULL)""")
+            }
+            runCatching { db.execSQL("CREATE INDEX IF NOT EXISTS idx_purchases_supplier  ON purchases(supplier_id)") }
+            runCatching { db.execSQL("CREATE INDEX IF NOT EXISTS idx_purchases_timestamp ON purchases(timestamp)") }
+            runCatching { db.execSQL("CREATE INDEX IF NOT EXISTS idx_pi_purchase         ON purchase_items(purchase_id)") }
+            runCatching { db.execSQL("CREATE INDEX IF NOT EXISTS idx_sl_supplier         ON supplier_ledger(supplier_id)") }
         }
     }
 
@@ -185,6 +270,51 @@ class DatabaseHelper(context: Context) :
             $COL_EXPENSE_AMOUNT REAL NOT NULL,
             $COL_EXPENSE_DATE   INTEGER NOT NULL)""")
 
+        db.execSQL("""CREATE TABLE $TABLE_SUPPLIERS (
+        $COL_SUP_ID      TEXT PRIMARY KEY,
+        $COL_SUP_NAME    TEXT NOT NULL,
+        $COL_SUP_PHONE   TEXT DEFAULT '',
+        $COL_SUP_ADDRESS TEXT DEFAULT '',
+        $COL_CUSTOMER_LATITUDE       REAL,
+        $COL_CUSTOMER_LONGITUDE      REAL,
+        $COL_SUP_BALANCE REAL DEFAULT 0)""")
+
+        db.execSQL("""CREATE TABLE $TABLE_PURCHASES (
+        $COL_PUR_ID            TEXT PRIMARY KEY,
+        $COL_PUR_SUPPLIER_ID   TEXT NOT NULL,
+        $COL_PUR_SUPPLIER_NAME TEXT NOT NULL,
+        $COL_PUR_PO_NUMBER     TEXT DEFAULT '',
+        $COL_PUR_ITEMS_TOTAL   REAL DEFAULT 0,
+        $COL_PUR_GST_TOTAL     REAL DEFAULT 0,
+        $COL_PUR_GRAND_TOTAL   REAL DEFAULT 0,
+        $COL_PUR_PAID_AMOUNT   REAL DEFAULT 0,
+        $COL_PUR_BALANCE       REAL DEFAULT 0,
+        $COL_PUR_TIMESTAMP     INTEGER NOT NULL,
+        $COL_PUR_NOTE          TEXT DEFAULT '',
+        FOREIGN KEY($COL_PUR_SUPPLIER_ID) REFERENCES $TABLE_SUPPLIERS($COL_SUP_ID))""")
+
+        db.execSQL("""CREATE TABLE $TABLE_PURCHASE_ITEMS (
+        $COL_PI_ID              TEXT PRIMARY KEY,
+        $COL_PI_PURCHASE_ID     TEXT NOT NULL,
+        $COL_PI_PRODUCT_ID      TEXT NOT NULL,
+        $COL_PI_NAME            TEXT NOT NULL,
+        $COL_PI_COST_PRICE      REAL NOT NULL,
+        $COL_PI_PREV_COST_PRICE REAL DEFAULT 0,
+        $COL_PI_QUANTITY        REAL NOT NULL,
+        $COL_PI_UNIT            TEXT DEFAULT 'Piece',
+        $COL_PI_GST             REAL DEFAULT 0,
+        FOREIGN KEY($COL_PI_PURCHASE_ID) REFERENCES $TABLE_PURCHASES($COL_PUR_ID))""")
+
+        db.execSQL("""CREATE TABLE $TABLE_SUPPLIER_LEDGER (
+        $COL_SL_ID          TEXT PRIMARY KEY,
+        $COL_SL_SUPPLIER_ID TEXT NOT NULL,
+        $COL_SL_AMOUNT      REAL NOT NULL,
+        $COL_SL_TYPE        TEXT NOT NULL,
+        $COL_SL_PURCHASE_ID TEXT DEFAULT '',
+        $COL_SL_NOTE        TEXT DEFAULT '',
+        $COL_SL_TIMESTAMP   INTEGER NOT NULL,
+        FOREIGN KEY($COL_SL_SUPPLIER_ID) REFERENCES $TABLE_SUPPLIERS($COL_SUP_ID))""")
+
         // Indexes for fast LIKE search — replaces FTS
         db.execSQL("CREATE INDEX idx_products_name     ON $TABLE_PRODUCTS($COL_PRODUCT_NAME)")
         db.execSQL("CREATE INDEX idx_products_category ON $TABLE_PRODUCTS($COL_PRODUCT_CATEGORY)")
@@ -192,6 +322,10 @@ class DatabaseHelper(context: Context) :
         db.execSQL("CREATE INDEX idx_bills_timestamp   ON $TABLE_BILLS($COL_BILL_TIMESTAMP)")
         db.execSQL("CREATE INDEX idx_bills_customer    ON $TABLE_BILLS($COL_BILL_CUSTOMER_ID)")
         db.execSQL("CREATE INDEX idx_bi_product        ON $TABLE_BILL_ITEMS($COL_BI_PRODUCT_ID)")
+        db.execSQL("CREATE INDEX idx_purchases_supplier  ON $TABLE_PURCHASES($COL_PUR_SUPPLIER_ID)")
+        db.execSQL("CREATE INDEX idx_purchases_timestamp ON $TABLE_PURCHASES($COL_PUR_TIMESTAMP)")
+        db.execSQL("CREATE INDEX idx_pi_purchase         ON $TABLE_PURCHASE_ITEMS($COL_PI_PURCHASE_ID)")
+        db.execSQL("CREATE INDEX idx_sl_supplier         ON $TABLE_SUPPLIER_LEDGER($COL_SL_SUPPLIER_ID)")
     }
 
     // ── CUSTOMERS ────────────────────────────────────────────────────
@@ -537,9 +671,208 @@ class DatabaseHelper(context: Context) :
         put(COL_PRODUCT_ALLOW_PARTIAL, if (allowPartial) 1 else 0)  // ← NEW
     }
 
+    // ── SUPPLIERS ─────────────────────────────────────────────────────
+
+    fun insertSupplier(s: Supplier): Boolean =
+        writableDatabase.insert(TABLE_SUPPLIERS, null, s.toCV()) != -1L
+
+    fun getAllSuppliers(): List<Supplier> = buildList {
+        readableDatabase.query(TABLE_SUPPLIERS, null, null, null, null, null,
+            "$COL_SUP_NAME ASC").use { while (it.moveToNext()) add(it.toSupplier()) }
+    }
+
+    fun getSupplierById(id: String): Supplier? {
+        readableDatabase.query(TABLE_SUPPLIERS, null, "$COL_SUP_ID=?",
+            arrayOf(id), null, null, null).use {
+            if (it.moveToFirst()) return it.toSupplier()
+        }
+        return null
+    }
+
+    fun updateSupplier(s: Supplier): Boolean {
+        val cv = ContentValues().apply {
+            put(COL_SUP_NAME, s.name); put(COL_SUP_PHONE, s.phone)
+            put(COL_SUP_ADDRESS, s.address); put(COL_SUP_BALANCE, s.balance)
+        }
+        return writableDatabase.update(TABLE_SUPPLIERS, cv,
+            "$COL_SUP_ID=?", arrayOf(s.id)) > 0
+    }
+
+    fun deleteSupplier(id: String): Boolean =
+        writableDatabase.delete(TABLE_SUPPLIERS, "$COL_SUP_ID=?", arrayOf(id)) > 0
+
+    fun searchSuppliers(q: String): List<Supplier> = buildList {
+        readableDatabase.query(TABLE_SUPPLIERS, null,
+            "$COL_SUP_NAME LIKE ? OR $COL_SUP_PHONE LIKE ?",
+            arrayOf("%$q%", "%$q%"), null, null, "$COL_SUP_NAME ASC")
+            .use { while (it.moveToNext()) add(it.toSupplier()) }
+    }
+
+    // ── PURCHASES ─────────────────────────────────────────────────────
+
+    fun insertPurchaseWithItems(purchase: Purchase): Boolean {
+        val db = writableDatabase
+        db.beginTransaction()
+        return try {
+            db.insertOrThrow(TABLE_PURCHASES, null, ContentValues().apply {
+                put(COL_PUR_ID,            purchase.id)
+                put(COL_PUR_SUPPLIER_ID,   purchase.supplierId)
+                put(COL_PUR_SUPPLIER_NAME, purchase.supplierName)
+                put(COL_PUR_PO_NUMBER,     purchase.poNumber)
+                put(COL_PUR_ITEMS_TOTAL,   purchase.itemsTotal)
+                put(COL_PUR_GST_TOTAL,     purchase.gstTotal)
+                put(COL_PUR_GRAND_TOTAL,   purchase.grandTotal)
+                put(COL_PUR_PAID_AMOUNT,   purchase.paidAmount)
+                put(COL_PUR_BALANCE,       purchase.balance)
+                put(COL_PUR_TIMESTAMP,     purchase.timestamp)
+                put(COL_PUR_NOTE,          purchase.note)
+            })
+
+            purchase.items.forEach { item ->
+                db.insertOrThrow(TABLE_PURCHASE_ITEMS, null, ContentValues().apply {
+                    put(COL_PI_ID,              UUID.randomUUID().toString())
+                    put(COL_PI_PURCHASE_ID,     purchase.id)
+                    put(COL_PI_PRODUCT_ID,      item.productId)
+                    put(COL_PI_NAME,            item.name)
+                    put(COL_PI_COST_PRICE,      item.costPrice)
+                    put(COL_PI_PREV_COST_PRICE, item.previousCostPrice)
+                    put(COL_PI_QUANTITY,        item.quantity)
+                    put(COL_PI_UNIT,            item.unit)
+                    put(COL_PI_GST,             item.gstPercent)
+                })
+                // Increment stock
+                incrementProductStock(item.productId, item.quantity)
+                // Update cost price if changed
+                if (item.costPrice != item.previousCostPrice) {
+                    writableDatabase.execSQL("UPDATE $TABLE_PRODUCTS SET $COL_PRODUCT_COST_PRICE = ? " +
+                            "WHERE $COL_PRODUCT_ID = ?",
+                        arrayOf(item.costPrice, item.productId))
+                }
+            }
+
+            db.setTransactionSuccessful(); true
+        } catch (e: Exception) { e.printStackTrace(); false }
+        finally { db.endTransaction() }
+    }
+
+    fun getAllPurchases(): List<Purchase> = queryPurchases(null, null)
+
+    fun getPurchasesBySupplier(supplierId: String): List<Purchase> =
+        queryPurchases("$COL_PUR_SUPPLIER_ID=?", arrayOf(supplierId))
+
+    fun getPurchasesByDateRange(from: Long, to: Long): List<Purchase> =
+        queryPurchases("$COL_PUR_TIMESTAMP BETWEEN ? AND ?",
+            arrayOf(from.toString(), to.toString()))
+
+    private fun queryPurchases(where: String?, args: Array<String>?): List<Purchase> = buildList {
+        readableDatabase.query(TABLE_PURCHASES, null, where, args, null, null,
+            "$COL_PUR_TIMESTAMP DESC").use { c ->
+            while (c.moveToNext()) {
+                val id = c.getString(c.getColumnIndexOrThrow(COL_PUR_ID))
+                add(Purchase(
+                    id           = id,
+                    supplierId   = c.getString(c.getColumnIndexOrThrow(COL_PUR_SUPPLIER_ID)),
+                    supplierName = c.getString(c.getColumnIndexOrThrow(COL_PUR_SUPPLIER_NAME)),
+                    poNumber     = c.getString(c.getColumnIndexOrThrow(COL_PUR_PO_NUMBER)),
+                    itemsTotal   = c.getDouble(c.getColumnIndexOrThrow(COL_PUR_ITEMS_TOTAL)),
+                    gstTotal     = c.getDouble(c.getColumnIndexOrThrow(COL_PUR_GST_TOTAL)),
+                    grandTotal   = c.getDouble(c.getColumnIndexOrThrow(COL_PUR_GRAND_TOTAL)),
+                    paidAmount   = c.getDouble(c.getColumnIndexOrThrow(COL_PUR_PAID_AMOUNT)),
+                    balance      = c.getDouble(c.getColumnIndexOrThrow(COL_PUR_BALANCE)),
+                    timestamp    = c.getLong(c.getColumnIndexOrThrow(COL_PUR_TIMESTAMP)),
+                    note         = c.getString(c.getColumnIndexOrThrow(COL_PUR_NOTE)) ?: "",
+                    items        = getPurchaseItems(id)
+                ))
+            }
+        }
+    }
+
+    private fun getPurchaseItems(purchaseId: String): List<PurchaseItem> = buildList {
+        readableDatabase.query(TABLE_PURCHASE_ITEMS, null, "$COL_PI_PURCHASE_ID=?",
+            arrayOf(purchaseId), null, null, null).use { c ->
+            while (c.moveToNext()) add(PurchaseItem(
+                productId         = c.getString(c.getColumnIndexOrThrow(COL_PI_PRODUCT_ID)),
+                name              = c.getString(c.getColumnIndexOrThrow(COL_PI_NAME)),
+                costPrice         = c.getDouble(c.getColumnIndexOrThrow(COL_PI_COST_PRICE)),
+                previousCostPrice = c.getDouble(c.getColumnIndexOrThrow(COL_PI_PREV_COST_PRICE)),
+                quantity          = c.getDouble(c.getColumnIndexOrThrow(COL_PI_QUANTITY)),
+                unit              = c.getString(c.getColumnIndexOrThrow(COL_PI_UNIT)) ?: "Piece",
+                gstPercent        = c.getDouble(c.getColumnIndexOrThrow(COL_PI_GST))
+            ))
+        }
+    }
+
+    // ── SUPPLIER LEDGER ───────────────────────────────────────────────
+
+    fun insertSupplierLedgerEntry(l: SupplierLedger): Boolean {
+        val cv = ContentValues().apply {
+            put(COL_SL_ID,          l.id)
+            put(COL_SL_SUPPLIER_ID, l.supplierId)
+            put(COL_SL_AMOUNT,      l.amount)
+            put(COL_SL_TYPE,        l.type)
+            put(COL_SL_PURCHASE_ID, l.purchaseId)
+            put(COL_SL_NOTE,        l.note)
+            put(COL_SL_TIMESTAMP,   l.timestamp)
+        }
+        return writableDatabase.insert(TABLE_SUPPLIER_LEDGER, null, cv) != -1L
+    }
+
+    fun getSupplierLedger(supplierId: String): List<SupplierLedger> = buildList {
+        readableDatabase.query(TABLE_SUPPLIER_LEDGER, null, "$COL_SL_SUPPLIER_ID=?",
+            arrayOf(supplierId), null, null, "$COL_SL_TIMESTAMP DESC").use { c ->
+            while (c.moveToNext()) add(SupplierLedger(
+                id         = c.getString(c.getColumnIndexOrThrow(COL_SL_ID)),
+                supplierId = c.getString(c.getColumnIndexOrThrow(COL_SL_SUPPLIER_ID)),
+                amount     = c.getDouble(c.getColumnIndexOrThrow(COL_SL_AMOUNT)),
+                type       = c.getString(c.getColumnIndexOrThrow(COL_SL_TYPE)),
+                purchaseId = c.getString(c.getColumnIndexOrThrow(COL_SL_PURCHASE_ID)) ?: "",
+                note       = c.getString(c.getColumnIndexOrThrow(COL_SL_NOTE)) ?: "",
+                timestamp  = c.getLong(c.getColumnIndexOrThrow(COL_SL_TIMESTAMP))
+            ))
+        }
+    }
+
+    // ── Cursor extensions (add alongside existing ones) ───────────────
+
+    private fun android.database.Cursor.toSupplier() = Supplier(
+        id        = getString(getColumnIndexOrThrow(COL_SUP_ID)),
+        name      = getString(getColumnIndexOrThrow(COL_SUP_NAME)),
+        phone     = getString(getColumnIndexOrThrow(COL_SUP_PHONE)) ?: "",
+        address   = getString(getColumnIndexOrThrow(COL_SUP_ADDRESS)) ?: "",
+        balance   = getDouble(getColumnIndexOrThrow(COL_SUP_BALANCE)),
+        latitude  = if (isNull(getColumnIndexOrThrow(COL_SUP_LATITUDE))) null
+        else getDouble(getColumnIndexOrThrow(COL_SUP_LATITUDE)),
+        longitude = if (isNull(getColumnIndexOrThrow(COL_SUP_LONGITUDE))) null
+        else getDouble(getColumnIndexOrThrow(COL_SUP_LONGITUDE))
+    )
+
+    // ── ContentValues helpers (add alongside existing ones) ───────────
+    private fun Supplier.toCV() = ContentValues().apply {
+        put(COL_SUP_ID, id); put(COL_SUP_NAME, name)
+        put(COL_SUP_PHONE, phone); put(COL_SUP_ADDRESS, address)
+        put(COL_SUP_BALANCE, balance)
+        if (latitude != null) put(COL_SUP_LATITUDE, latitude)
+        if (longitude != null) put(COL_SUP_LONGITUDE, longitude)
+    }
+
+    fun reducePurchaseBalance(purchaseId: String, amount: Double) {
+        writableDatabase.execSQL(
+            "UPDATE $TABLE_PURCHASES SET " +
+                    "$COL_PUR_PAID_AMOUNT = $COL_PUR_PAID_AMOUNT + ?, " +
+                    "$COL_PUR_BALANCE = $COL_PUR_BALANCE - ? " +
+                    "WHERE $COL_PUR_ID = ?",
+            arrayOf(amount, amount, purchaseId)
+        )
+    }
+
+    // ── clearAllData() — add new tables ───────────────────────────────
+    // Update your existing clearAllData() to also clear new tables:
     fun clearAllData() {
         writableDatabase.apply {
-            // Delete children before parents to respect foreign keys
+            delete(TABLE_PURCHASE_ITEMS, null, null)
+            delete(TABLE_SUPPLIER_LEDGER, null, null)
+            delete(TABLE_PURCHASES, null, null)
+            delete(TABLE_SUPPLIERS, null, null)
             delete(TABLE_BILL_ITEMS, null, null)
             delete(TABLE_LEDGER,     null, null)
             delete(TABLE_BILLS,      null, null)
