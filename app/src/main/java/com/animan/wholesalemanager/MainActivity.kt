@@ -267,16 +267,23 @@ class MainActivity : ComponentActivity() {
 
                     // ── Purchase ──────────────────────────────────────
                     composable(
-                        route     = "purchase/{supplierId}",
-                        arguments = listOf(navArgument("supplierId") {
-                            type = NavType.StringType })
+                        route     = "purchase/{supplierId}?preselect={productId}",
+                        arguments = listOf(
+                            navArgument("supplierId") { type = NavType.StringType },
+                            navArgument("productId")  {
+                                type          = NavType.StringType
+                                nullable      = true
+                                defaultValue  = null
+                            }
+                        )
                     ) { backStack ->
-                        val supplierId = backStack.arguments?.getString("supplierId")
-                            ?: return@composable
+                        val supplierId = backStack.arguments?.getString("supplierId") ?: return@composable
+                        val preselect  = backStack.arguments?.getString("productId")  // nullable — null if not passed
                         PurchaseScreen(
-                            supplierId      = supplierId,
-                            onPurchaseSaved = { navController.popBackStack() },
-                            onBack          = { navController.popBackStack() }
+                            supplierId         = supplierId,
+                            preselectProductId = preselect,
+                            onPurchaseSaved    = { navController.popBackStack() },
+                            onBack             = { navController.popBackStack() }
                         )
                     }
 

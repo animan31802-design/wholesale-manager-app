@@ -3,11 +3,17 @@ package com.animan.wholesalemanager.viewmodel
 import android.app.Application
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.animan.wholesalemanager.data.local.Product
+import com.animan.wholesalemanager.data.local.ProductSupplierLink
 import com.animan.wholesalemanager.repository.ProductRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class ProductViewModel(app: Application) : AndroidViewModel(app) {
 
+    var supplierLinks = mutableStateOf<List<ProductSupplierLink>>(emptyList())
     private val repository = ProductRepository(app.applicationContext)
 
     var productList  = mutableStateOf<List<Product>>(emptyList())
@@ -76,6 +82,35 @@ class ProductViewModel(app: Application) : AndroidViewModel(app) {
                 onSuccess = { fetchProducts(); onSuccess() },
                 onError   = { errorMessage.value = it }
             )
+        }
+    }
+
+    fun fetchSupplierLinks(productId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val db    = com.animan.wholesalemanager.data.local.DatabaseHelper(getApplication())
+            val links = db.getSuppliersByProduct(productId)
+            withContext(Dispatchers.Main) { supplierLinks.value = links }
+        }
+    }
+
+    fun addSupplierLink(link: ProductSupplierLink, onSuccess: () -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val db = com.animan.wholesalemanager.data.local.DatabaseHelper(getApplication())
+            db.addProductSupplierLink(link)
+            val updated = db.getSuppliersByProduct(link.productId)
+            withContext(Dispatchers.Main) {
+                supplierLinks.value = updated
+                onSuccess()
+            }
+        }
+    }
+
+    fun removeSupplierLink(linkId: String, productId: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val db = com.animan.wholesalemanager.data.local.DatabaseHelper(getApplication())
+            db.removeProductSupplierLink(linkId)
+            val updated = db.getSuppliersByProduct(productId)
+            withContext(Dispatchers.Main) { supplierLinks.value = updated }
         }
     }
 }

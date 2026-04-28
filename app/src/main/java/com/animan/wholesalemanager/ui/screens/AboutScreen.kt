@@ -225,10 +225,11 @@ fun AboutScreen(navController: NavController) {
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = "M",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
+                            Image(
+                                painter = painterResource(id = R.drawable.animan_profile), // 🔁 change this
+                                contentDescription = "ANIMAN",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
                             )
                         }
 

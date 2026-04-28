@@ -41,6 +41,7 @@ class PrinterManager {
         const val UNDERLINE_ON  = "\u001B\u002D\u0001"
         const val UNDERLINE_OFF = "\u001B\u002D\u0000"
         const val FULL_CUT      = "\u001D\u0056\u0041\u0005"
+        const val SIZE_HUGE     = "\u001D\u0021\u0033"
     }
 
     // ── Convenience: transliterate Tamil → Roman for printer output ───
@@ -90,6 +91,7 @@ class PrinterManager {
         val (device, error) = resolveDevice(context)
         if (device == null) return error
         if (!printer.connect(device)) return "Printer connection failed"
+        printer.initialize()
 
         val shopName   = AppPreferences.getShopName(context)
         val balance    = finalAmount - paidAmount
@@ -135,6 +137,7 @@ class PrinterManager {
         val (device, error) = resolveDevice(context)
         if (device == null) return error
         if (!printer.connect(device)) return "Printer connection failed"
+        printer.initialize()
 
         val shopName = p(AppPreferences.getShopName(context))
         val isTamil  = AppLanguage.current == Language.TAMIL
@@ -184,7 +187,7 @@ class PrinterManager {
 
         append(RESET)
         append(ALIGN_CENTER)
-        append(SIZE_BIG_BOLD); append(shopName.uppercase()); append("\n")
+        append(SIZE_HUGE); append(shopName.uppercase()); append("\n")
         append(SIZE_NORMAL)
         append(ALIGN_LEFT)
         append(dashDivider())
@@ -227,8 +230,8 @@ class PrinterManager {
 
         append(amtRow("SUBTOTAL", fmt(itemsTotal)))
         if (gstTotal > 0.001) append(amtRow("GST", fmt(gstTotal)))
-        append(SIZE_BOLD)
-        append(amtRow("TOTAL AMOUNT", fmt(grandTotal)))
+        append(SIZE_HUGE)
+        append(amtRow("TOTAL", fmt(grandTotal)))
         append(SIZE_NORMAL)
         append(dashDivider())
 
@@ -266,7 +269,7 @@ class PrinterManager {
 
         append(RESET)
         append(ALIGN_CENTER)
-        append(SIZE_BIG_BOLD); append(shopName.uppercase()); append("\n")
+        append(SIZE_HUGE); append(shopName.uppercase()); append("\n")
         append(SIZE_BOLD);     append("BILL\n")
         append(SIZE_NORMAL)
         append(ALIGN_LEFT)
@@ -313,8 +316,8 @@ class PrinterManager {
 
         append(amtRow("SUBTOTAL", fmt(itemsTotal)))
         if (gstTotal > 0.001) append(amtRow("GST", fmt(gstTotal)))
-        append(SIZE_BOLD)
-        append(amtRow("TOTAL AMOUNT", fmt(grandTotal)))
+        append(SIZE_HUGE)
+        append(amtRow("TOTAL", fmt(grandTotal)))
         append(SIZE_NORMAL)
         append(solidDivider())
 
@@ -355,7 +358,7 @@ class PrinterManager {
 
         append(RESET)
         append(ALIGN_CENTER)
-        append(SIZE_BIG_BOLD); append(shopName.uppercase()); append("\n")
+        append(SIZE_HUGE); append(shopName.uppercase()); append("\n")
         append(SIZE_BOLD);     append("TAX INVOICE\n")
         append(SIZE_NORMAL)
         append(ALIGN_LEFT)
@@ -413,7 +416,7 @@ class PrinterManager {
             append(FONT_A)
             append(amtRow("Total GST", fmt(gstTotal)))
         }
-        append(SIZE_BOLD); append(amtRow("GRAND TOTAL", fmt(grandTotal))); append(SIZE_NORMAL)
+        append(SIZE_HUGE); append(amtRow("TOTAL", fmt(grandTotal))); append(SIZE_NORMAL)
         append(solidDivider())
 
         if (prevBal > 0.001) {

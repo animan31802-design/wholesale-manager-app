@@ -49,6 +49,7 @@ fun SettingsScreen(navController: NavController) {
     var shopNameSaved   by remember { mutableStateOf("") }
     var upiSaved        by remember { mutableStateOf("") }
     var isTestPrinting  by remember { mutableStateOf(false) }
+    var isTamilTesting by remember { mutableStateOf(false) }
 
     var selectedBillStyle by remember {
         mutableStateOf(PrinterPreferences.getBillStyle(context))
@@ -276,6 +277,52 @@ fun SettingsScreen(navController: NavController) {
                     Icon(Icons.Filled.Print, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text("Print test bill ($styleLabel)")
+                }
+            }
+
+            HorizontalDivider()
+
+            SectionHeader(Icons.Filled.FontDownload, "Tamil font test")
+
+            Text(
+                "Prints all Tamil font sizes (8sp–40sp) as bitmap images to verify " +
+                        "Tamil rendering on your printer. Make sure you have enough paper — " +
+                        "this prints a long test page.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Button(
+                onClick = {
+                    if (isTamilTesting) return@Button
+                    isTamilTesting = true
+                    val appCtx = context.applicationContext
+                    scope.launch(Dispatchers.IO) {
+                        val result = com.animan.wholesalemanager.printer.TamilTestPrinter()
+                            .printTamilFontTest(appCtx)
+                        withContext(Dispatchers.Main) {
+                            isTamilTesting = false
+                            snackbarHost.showSnackbar(result)
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled  = !isTamilTesting,
+                colors   = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondary)
+            ) {
+                if (isTamilTesting) {
+                    CircularProgressIndicator(
+                        modifier    = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color       = MaterialTheme.colorScheme.onSecondary
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Printing Tamil test…")
+                } else {
+                    Icon(Icons.Filled.FontDownload, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Print Tamil font size test")
                 }
             }
 

@@ -43,6 +43,9 @@ fun SupplierListScreen(navController: NavController) {
                     }
                 },
                 actions = {
+                    IconButton(onClick = { navController.navigate("supplier_report") }) {
+                        Icon(Icons.Filled.BarChart, contentDescription = "Supplier report")
+                    }
                     IconButton(onClick = { navController.navigate("purchase_history") }) {
                         Icon(Icons.Filled.History, contentDescription = "Purchase history")
                     }

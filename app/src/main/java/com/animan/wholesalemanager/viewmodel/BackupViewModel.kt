@@ -180,7 +180,12 @@ class BackupViewModel(app: Application) : AndroidViewModel(app) {
                         minStockLevel = d.getDouble("minStockLevel") ?: 5.0,
                         barcode       = d.getString("barcode") ?: "",
                         gstPercent    = d.getDouble("gstPercent") ?: 0.0,
-                        allowPartial  = (d.getLong("allowPartial") ?: 0L) == 1L
+                        allowPartial = when (val v = d.get("allowPartial")) {
+                            is Boolean -> v
+                            is Number  -> v.toInt() == 1
+                            is String  -> v.equals("true", true) || v == "1"
+                            else -> false
+                        }
                     )
                 } catch (_: Exception) { null }
             }

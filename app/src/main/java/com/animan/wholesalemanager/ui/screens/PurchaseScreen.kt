@@ -42,6 +42,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun PurchaseScreen(
     supplierId : String,
+    preselectProductId : String? = null,
     onPurchaseSaved: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -76,6 +77,19 @@ fun PurchaseScreen(
         delay(100)
         supplier = supplierViewModel.supplierList.value.find { it.id == supplierId }
         delay(200); searchFocusRequester.requestFocus()
+    }
+
+    LaunchedEffect(productViewModel.productList.value) {
+        if (preselectProductId != null &&
+            qtyDialogProduct == null &&
+            cartQty[preselectProductId] == null) {
+            val product = productViewModel.productList.value
+                .find { it.id == preselectProductId }
+            if (product != null) {
+                cartPrice[product.id] = product.costPrice
+                qtyDialogProduct = product   // opens the qty+price dialog automatically
+            }
+        }
     }
 
     // Re-resolve supplier after list loads

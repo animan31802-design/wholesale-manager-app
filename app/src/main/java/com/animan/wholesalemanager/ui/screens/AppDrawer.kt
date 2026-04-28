@@ -75,10 +75,11 @@ fun AppDrawer(
             "supplier_list",
             badgeCount = suppliersDueCount
         ),
+        DrawerItem("Supplier report",      Icons.Filled.BarChart,           "supplier_report"),
         DrawerItem("Expenses", Icons.Filled.MoneyOff, "expenses"),
         DrawerItem("Reports", Icons.Filled.BarChart, "reports"),
-        DrawerItem("About", Icons.Filled.Info, "about"),
-        DrawerItem("Settings", Icons.Filled.Settings, "settings")
+        DrawerItem("Settings", Icons.Filled.Settings, "settings"),
+        DrawerItem("About", Icons.Filled.Info, "about")
     )
 
     ModalDrawerSheet(

@@ -11,7 +11,7 @@ class DatabaseHelper(context: Context) :
 
     companion object {
         const val DATABASE_NAME    = "wholesale_manager.db"
-        const val DATABASE_VERSION = 7  // bumped: Supplier Implementation
+        const val DATABASE_VERSION = 8  // bumped: Supplier Product Link Implementation
 
         const val TABLE_CUSTOMERS    = "customers"
         const val TABLE_PRODUCTS     = "products"
@@ -96,6 +96,14 @@ class DatabaseHelper(context: Context) :
         const val COL_SUP_BALANCE = "balance"
         const val COL_SUP_LATITUDE  = "latitude"
         const val COL_SUP_LONGITUDE = "longitude"
+
+        const val TABLE_PRODUCT_SUPPLIERS  = "product_suppliers"
+        const val COL_PS_ID                = "id"
+        const val COL_PS_PRODUCT_ID        = "product_id"
+        const val COL_PS_SUPPLIER_ID       = "supplier_id"
+        const val COL_PS_SUPPLIER_NAME     = "supplier_name"
+        const val COL_PS_COST_PRICE        = "cost_price"   // last known cost from this supplier
+        const val COL_PS_NOTE              = "note"
 
         // purchases
         const val COL_PUR_ID            = "id"
@@ -201,6 +209,19 @@ class DatabaseHelper(context: Context) :
             runCatching { db.execSQL("CREATE INDEX IF NOT EXISTS idx_pi_purchase         ON purchase_items(purchase_id)") }
             runCatching { db.execSQL("CREATE INDEX IF NOT EXISTS idx_sl_supplier         ON supplier_ledger(supplier_id)") }
         }
+        if (oldVersion < 8) {
+            runCatching {
+                db.execSQL("""CREATE TABLE IF NOT EXISTS product_suppliers (
+            id TEXT PRIMARY KEY,
+            product_id TEXT NOT NULL,
+            supplier_id TEXT NOT NULL,
+            supplier_name TEXT NOT NULL,
+            cost_price REAL DEFAULT 0,
+            note TEXT DEFAULT '')""")
+            }
+            runCatching { db.execSQL("CREATE INDEX IF NOT EXISTS idx_ps_product  ON product_suppliers(product_id)") }
+            runCatching { db.execSQL("CREATE INDEX IF NOT EXISTS idx_ps_supplier ON product_suppliers(supplier_id)") }
+        }
     }
 
     private fun createAllTables(db: SQLiteDatabase) {
@@ -271,49 +292,59 @@ class DatabaseHelper(context: Context) :
             $COL_EXPENSE_DATE   INTEGER NOT NULL)""")
 
         db.execSQL("""CREATE TABLE $TABLE_SUPPLIERS (
-        $COL_SUP_ID      TEXT PRIMARY KEY,
-        $COL_SUP_NAME    TEXT NOT NULL,
-        $COL_SUP_PHONE   TEXT DEFAULT '',
-        $COL_SUP_ADDRESS TEXT DEFAULT '',
-        $COL_CUSTOMER_LATITUDE       REAL,
-        $COL_CUSTOMER_LONGITUDE      REAL,
-        $COL_SUP_BALANCE REAL DEFAULT 0)""")
+            $COL_SUP_ID      TEXT PRIMARY KEY,
+            $COL_SUP_NAME    TEXT NOT NULL,
+            $COL_SUP_PHONE   TEXT DEFAULT '',
+            $COL_SUP_ADDRESS TEXT DEFAULT '',
+            $COL_CUSTOMER_LATITUDE       REAL,
+            $COL_CUSTOMER_LONGITUDE      REAL,
+            $COL_SUP_BALANCE REAL DEFAULT 0)""")
 
         db.execSQL("""CREATE TABLE $TABLE_PURCHASES (
-        $COL_PUR_ID            TEXT PRIMARY KEY,
-        $COL_PUR_SUPPLIER_ID   TEXT NOT NULL,
-        $COL_PUR_SUPPLIER_NAME TEXT NOT NULL,
-        $COL_PUR_PO_NUMBER     TEXT DEFAULT '',
-        $COL_PUR_ITEMS_TOTAL   REAL DEFAULT 0,
-        $COL_PUR_GST_TOTAL     REAL DEFAULT 0,
-        $COL_PUR_GRAND_TOTAL   REAL DEFAULT 0,
-        $COL_PUR_PAID_AMOUNT   REAL DEFAULT 0,
-        $COL_PUR_BALANCE       REAL DEFAULT 0,
-        $COL_PUR_TIMESTAMP     INTEGER NOT NULL,
-        $COL_PUR_NOTE          TEXT DEFAULT '',
-        FOREIGN KEY($COL_PUR_SUPPLIER_ID) REFERENCES $TABLE_SUPPLIERS($COL_SUP_ID))""")
+            $COL_PUR_ID            TEXT PRIMARY KEY,
+            $COL_PUR_SUPPLIER_ID   TEXT NOT NULL,
+            $COL_PUR_SUPPLIER_NAME TEXT NOT NULL,
+            $COL_PUR_PO_NUMBER     TEXT DEFAULT '',
+            $COL_PUR_ITEMS_TOTAL   REAL DEFAULT 0,
+            $COL_PUR_GST_TOTAL     REAL DEFAULT 0,
+            $COL_PUR_GRAND_TOTAL   REAL DEFAULT 0,
+            $COL_PUR_PAID_AMOUNT   REAL DEFAULT 0,
+            $COL_PUR_BALANCE       REAL DEFAULT 0,
+            $COL_PUR_TIMESTAMP     INTEGER NOT NULL,
+            $COL_PUR_NOTE          TEXT DEFAULT '',
+            FOREIGN KEY($COL_PUR_SUPPLIER_ID) REFERENCES $TABLE_SUPPLIERS($COL_SUP_ID))""")
 
         db.execSQL("""CREATE TABLE $TABLE_PURCHASE_ITEMS (
-        $COL_PI_ID              TEXT PRIMARY KEY,
-        $COL_PI_PURCHASE_ID     TEXT NOT NULL,
-        $COL_PI_PRODUCT_ID      TEXT NOT NULL,
-        $COL_PI_NAME            TEXT NOT NULL,
-        $COL_PI_COST_PRICE      REAL NOT NULL,
-        $COL_PI_PREV_COST_PRICE REAL DEFAULT 0,
-        $COL_PI_QUANTITY        REAL NOT NULL,
-        $COL_PI_UNIT            TEXT DEFAULT 'Piece',
-        $COL_PI_GST             REAL DEFAULT 0,
-        FOREIGN KEY($COL_PI_PURCHASE_ID) REFERENCES $TABLE_PURCHASES($COL_PUR_ID))""")
+            $COL_PI_ID              TEXT PRIMARY KEY,
+            $COL_PI_PURCHASE_ID     TEXT NOT NULL,
+            $COL_PI_PRODUCT_ID      TEXT NOT NULL,
+            $COL_PI_NAME            TEXT NOT NULL,
+            $COL_PI_COST_PRICE      REAL NOT NULL,
+            $COL_PI_PREV_COST_PRICE REAL DEFAULT 0,
+            $COL_PI_QUANTITY        REAL NOT NULL,
+            $COL_PI_UNIT            TEXT DEFAULT 'Piece',
+            $COL_PI_GST             REAL DEFAULT 0,
+            FOREIGN KEY($COL_PI_PURCHASE_ID) REFERENCES $TABLE_PURCHASES($COL_PUR_ID))""")
 
         db.execSQL("""CREATE TABLE $TABLE_SUPPLIER_LEDGER (
-        $COL_SL_ID          TEXT PRIMARY KEY,
-        $COL_SL_SUPPLIER_ID TEXT NOT NULL,
-        $COL_SL_AMOUNT      REAL NOT NULL,
-        $COL_SL_TYPE        TEXT NOT NULL,
-        $COL_SL_PURCHASE_ID TEXT DEFAULT '',
-        $COL_SL_NOTE        TEXT DEFAULT '',
-        $COL_SL_TIMESTAMP   INTEGER NOT NULL,
-        FOREIGN KEY($COL_SL_SUPPLIER_ID) REFERENCES $TABLE_SUPPLIERS($COL_SUP_ID))""")
+            $COL_SL_ID          TEXT PRIMARY KEY,
+            $COL_SL_SUPPLIER_ID TEXT NOT NULL,
+            $COL_SL_AMOUNT      REAL NOT NULL,
+            $COL_SL_TYPE        TEXT NOT NULL,
+            $COL_SL_PURCHASE_ID TEXT DEFAULT '',
+            $COL_SL_NOTE        TEXT DEFAULT '',
+            $COL_SL_TIMESTAMP   INTEGER NOT NULL,
+            FOREIGN KEY($COL_SL_SUPPLIER_ID) REFERENCES $TABLE_SUPPLIERS($COL_SUP_ID))""")
+
+        db.execSQL("""CREATE TABLE $TABLE_PRODUCT_SUPPLIERS (
+            $COL_PS_ID           TEXT PRIMARY KEY,
+            $COL_PS_PRODUCT_ID   TEXT NOT NULL,
+            $COL_PS_SUPPLIER_ID  TEXT NOT NULL,
+            $COL_PS_SUPPLIER_NAME TEXT NOT NULL,
+            $COL_PS_COST_PRICE   REAL DEFAULT 0,
+            $COL_PS_NOTE         TEXT DEFAULT '',
+            FOREIGN KEY($COL_PS_PRODUCT_ID)  REFERENCES $TABLE_PRODUCTS($COL_PRODUCT_ID),
+            FOREIGN KEY($COL_PS_SUPPLIER_ID) REFERENCES $TABLE_SUPPLIERS($COL_SUP_ID))""")
 
         // Indexes for fast LIKE search — replaces FTS
         db.execSQL("CREATE INDEX idx_products_name     ON $TABLE_PRODUCTS($COL_PRODUCT_NAME)")
@@ -326,6 +357,8 @@ class DatabaseHelper(context: Context) :
         db.execSQL("CREATE INDEX idx_purchases_timestamp ON $TABLE_PURCHASES($COL_PUR_TIMESTAMP)")
         db.execSQL("CREATE INDEX idx_pi_purchase         ON $TABLE_PURCHASE_ITEMS($COL_PI_PURCHASE_ID)")
         db.execSQL("CREATE INDEX idx_sl_supplier         ON $TABLE_SUPPLIER_LEDGER($COL_SL_SUPPLIER_ID)")
+        db.execSQL("CREATE INDEX idx_ps_product  ON $TABLE_PRODUCT_SUPPLIERS($COL_PS_PRODUCT_ID)")
+        db.execSQL("CREATE INDEX idx_ps_supplier ON $TABLE_PRODUCT_SUPPLIERS($COL_PS_SUPPLIER_ID)")
     }
 
     // ── CUSTOMERS ────────────────────────────────────────────────────
@@ -865,20 +898,60 @@ class DatabaseHelper(context: Context) :
         )
     }
 
+    fun getSuppliersByProduct(productId: String): List<ProductSupplierLink> = buildList {
+        readableDatabase.query(TABLE_PRODUCT_SUPPLIERS, null,
+            "$COL_PS_PRODUCT_ID=?", arrayOf(productId),
+            null, null, "$COL_PS_SUPPLIER_NAME ASC").use { c ->
+            while (c.moveToNext()) add(ProductSupplierLink(
+                id           = c.getString(c.getColumnIndexOrThrow(COL_PS_ID)),
+                productId    = c.getString(c.getColumnIndexOrThrow(COL_PS_PRODUCT_ID)),
+                supplierId   = c.getString(c.getColumnIndexOrThrow(COL_PS_SUPPLIER_ID)),
+                supplierName = c.getString(c.getColumnIndexOrThrow(COL_PS_SUPPLIER_NAME)),
+                costPrice    = c.getDouble(c.getColumnIndexOrThrow(COL_PS_COST_PRICE)),
+                note         = c.getString(c.getColumnIndexOrThrow(COL_PS_NOTE)) ?: ""
+            ))
+        }
+    }
+
+    fun addProductSupplierLink(link: ProductSupplierLink): Boolean =
+        writableDatabase.insert(TABLE_PRODUCT_SUPPLIERS, null, ContentValues().apply {
+            put(COL_PS_ID,            link.id)
+            put(COL_PS_PRODUCT_ID,    link.productId)
+            put(COL_PS_SUPPLIER_ID,   link.supplierId)
+            put(COL_PS_SUPPLIER_NAME, link.supplierName)
+            put(COL_PS_COST_PRICE,    link.costPrice)
+            put(COL_PS_NOTE,          link.note)
+        }) != -1L
+
+    fun removeProductSupplierLink(linkId: String): Boolean =
+        writableDatabase.delete(TABLE_PRODUCT_SUPPLIERS,
+            "$COL_PS_ID=?", arrayOf(linkId)) > 0
+
+    fun updateProductSupplierLink(link: ProductSupplierLink): Boolean =
+        writableDatabase.update(TABLE_PRODUCT_SUPPLIERS, ContentValues().apply {
+            put(COL_PS_COST_PRICE, link.costPrice)
+            put(COL_PS_NOTE,       link.note)
+        }, "$COL_PS_ID=?", arrayOf(link.id)) > 0
+
+
     // ── clearAllData() — add new tables ───────────────────────────────
     // Update your existing clearAllData() to also clear new tables:
     fun clearAllData() {
         writableDatabase.apply {
-            delete(TABLE_PURCHASE_ITEMS, null, null)
-            delete(TABLE_SUPPLIER_LEDGER, null, null)
-            delete(TABLE_PURCHASES, null, null)
-            delete(TABLE_SUPPLIERS, null, null)
-            delete(TABLE_BILL_ITEMS, null, null)
-            delete(TABLE_LEDGER,     null, null)
-            delete(TABLE_BILLS,      null, null)
-            delete(TABLE_EXPENSES,   null, null)
-            delete(TABLE_CUSTOMERS,  null, null)
-            delete(TABLE_PRODUCTS,   null, null)
+            // Children first — tables with foreign keys pointing to others
+            delete(TABLE_PRODUCT_SUPPLIERS, null, null)  // ← missing, add this
+            delete(TABLE_PURCHASE_ITEMS,    null, null)
+            delete(TABLE_SUPPLIER_LEDGER,   null, null)
+            delete(TABLE_BILL_ITEMS,        null, null)
+            delete(TABLE_LEDGER,            null, null)
+            // Parents next
+            delete(TABLE_PURCHASES,         null, null)
+            delete(TABLE_BILLS,             null, null)
+            delete(TABLE_EXPENSES,          null, null)
+            // Root tables last
+            delete(TABLE_SUPPLIERS,         null, null)
+            delete(TABLE_CUSTOMERS,         null, null)
+            delete(TABLE_PRODUCTS,          null, null)
         }
     }
 }
